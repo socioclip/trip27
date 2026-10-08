@@ -208,6 +208,7 @@ export interface Order {
   passengers: { name: string; type: string }[];
   services: { label: string; quantity: number }[];
   contactEmail: string;
+  emailSent?: boolean;
   live: boolean;
 }
 

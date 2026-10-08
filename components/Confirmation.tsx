@@ -52,7 +52,7 @@ export default function Confirmation({ orderId }: { orderId: string }) {
             <div>
               <span className="inline-flex items-center gap-2 rounded-full bg-mint-500 text-white text-xs font-bold px-3 py-1">✓ {order.status === "confirmed" ? "Booking confirmed" : "Booking received"}</span>
               <h1 className="text-2xl sm:text-3xl font-extrabold mt-3">You&apos;re going to {order.slices[0]?.destination.city}!</h1>
-              <p className="text-white/70 text-sm mt-1">{order.contactEmail ? `Confirmation sent to ${order.contactEmail}` : "Keep your booking reference handy."}</p>
+              <p className="text-white/70 text-sm mt-1">{order.emailSent && order.contactEmail ? `Confirmation sent to ${order.contactEmail}` : "Keep your booking reference handy."}</p>
             </div>
             <div className="rounded-2xl bg-white/10 border border-white/20 px-5 py-3 text-center">
               <p className="text-[11px] uppercase tracking-widest text-white/60 font-semibold">Booking reference</p>

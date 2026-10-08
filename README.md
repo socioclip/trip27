@@ -24,7 +24,7 @@ Before going live:
 - **Safety switch.** With a `duffel_live_…` token, bookings are blocked until you set `ALLOW_LIVE_BOOKINGS=true`.
 - **Currency.** Duffel prices come in your account's currency. Non-AED prices are converted for display using `FX_RATES_TO_AED`, and the supplier is always paid the exact original amount. Use a live FX feed in production, or ask Duffel to bill in AED.
 - **Your margin.** `SERVICE_FEE_AED` adds a per-booking fee to the displayed total, which you collect through your gateway.
-- **Emails.** Hook a provider (Resend, SES, SendGrid) into `app/api/orders/route.ts` after a successful order.
+- **Emails.** Booking confirmations are sent through Resend when `RESEND_API_KEY` and `EMAIL_FROM` are set (see `lib/email.ts`). To email any customer, verify your own domain in Resend. A failed email never fails the booking.
 - **Booking lookup.** `/booking/[orderId]` shows any order by ID. Add a check against email or last name before exposing it publicly.
 
 ## Deploy

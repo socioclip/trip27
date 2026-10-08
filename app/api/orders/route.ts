@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getProvider, liveBookingsAllowed } from "@/lib/providers";
 import { fail } from "@/lib/http";
+import { sendConfirmation } from "@/lib/email";
 import type { CreateOrderInput, PassengerInput } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -41,6 +42,9 @@ export async function POST(req: Request) {
   body.services = (body.services || []).filter((s) => s && s.id && s.quantity > 0);
   try {
     const order = await getProvider(body.offerId).createOrder(body);
+    // The booking is made; an email failure must never turn it into an error.
+    const base = new URL(req.url).origin + (process.env.NEXT_PUBLIC_BASE_PATH || "");
+    order.emailSent = await sendConfirmation(order, body.contact.email, `${base}/booking/${encodeURIComponent(order.id)}`);
     return NextResponse.json({ order });
   } catch (e) {
     return fail(e);
