@@ -2,45 +2,26 @@ import { NextResponse } from "next/server";
 import { getProvider, liveBookingsAllowed } from "@/lib/providers";
 import { fail } from "@/lib/http";
 import { sendConfirmation } from "@/lib/email";
-import type { CreateOrderInput, PassengerInput } from "@/lib/types";
+import { validateBooking } from "@/lib/booking";
+import { ckoEnabled } from "@/lib/checkout-com";
+import type { CreateOrderInput } from "@/lib/types";
 
 export const maxDuration = 60;
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE = /^\+[1-9]\d{6,14}$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const NAME = /^[A-Za-z][A-Za-z' -]{0,49}$/;
-
-function check(p: PassengerInput): string | null {
-  if (!p.id) return "Missing passenger.";
-  if (!NAME.test(p.givenName?.trim() || "") || !NAME.test(p.familyName?.trim() || ""))
-    return "Names must use English letters only, as shown in the passport.";
-  if (!DATE.test(p.bornOn || "")) return "Please enter a valid date of birth.";
-  if (!["mr", "ms", "mrs", "miss", "dr"].includes(p.title)) return "Please choose a title.";
-  if (!["m", "f"].includes(p.gender)) return "Please choose a gender.";
-  return null;
-}
-
+// Books WITHOUT taking a payment. Used for demo fares, and for supplier test
+// mode only while no payment gateway is configured.
 export async function POST(req: Request) {
-  let body: CreateOrderInput;
+  let raw: CreateOrderInput;
   try {
-    body = await req.json();
+    raw = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-  if (!body?.offerId || !Array.isArray(body.passengers) || !body.passengers.length)
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
-  if (!EMAIL.test(body.contact?.email || "")) return NextResponse.json({ error: "Please enter a valid email." }, { status: 400 });
-  if (!PHONE.test(body.contact?.phone || ""))
-    return NextResponse.json({ error: "Please enter a valid mobile number with country code." }, { status: 400 });
-  for (const p of body.passengers) {
-    const err = check(p);
-    if (err) return NextResponse.json({ error: err }, { status: 400 });
-  }
-  if (!body.offerId.startsWith("demo_") && !liveBookingsAllowed())
-    return NextResponse.json({ error: "Online booking is not enabled yet." }, { status: 503 });
-  body.services = (body.services || []).filter((s) => s && s.id && s.quantity > 0);
   try {
+    const body = validateBooking(raw);
+    const demo = body.offerId.startsWith("demo_");
+    if (!demo && ckoEnabled()) return NextResponse.json({ error: "Payment is required to complete this booking." }, { status: 402 });
+    if (!demo && !liveBookingsAllowed()) return NextResponse.json({ error: "Online booking is not enabled yet." }, { status: 503 });
     const order = await getProvider(body.offerId).createOrder(body);
     // The booking is made; an email failure must never turn it into an error.
     const base = new URL(req.url).origin + (process.env.NEXT_PUBLIC_BASE_PATH || "");

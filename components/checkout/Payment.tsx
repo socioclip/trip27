@@ -54,6 +54,8 @@ export default function Payment({
   errors,
   sliceLabels,
   mode,
+  hosted = false,
+  hostedSlot,
 }: {
   offer: Offer;
   pax: PassengerInput[];
@@ -64,6 +66,8 @@ export default function Payment({
   errors: Record<string, string>;
   sliceLabels: string[];
   mode: string;
+  hosted?: boolean;
+  hostedSlot?: React.ReactNode;
 }) {
   const brand = /^4/.test(card.number) ? "Visa" : /^(5[1-5]|2[2-7])/.test(card.number) ? "Mastercard" : /^3[47]/.test(card.number) ? "Amex" : "";
   return (
@@ -109,6 +113,22 @@ export default function Payment({
             Secure payment
           </span>
         </div>
+        {hosted ? (
+          <>
+            {mode !== "live" && (
+              <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Test mode: no real money is taken. Use test card <b>4242 4242 4242 4242</b>, any future expiry date and CVC <b>100</b>. If asked for a 3D Secure password, enter <b>Checkout1!</b>
+              </p>
+            )}
+        <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+          <input type="checkbox" className="w-4 h-4 mt-0.5" checked={card.agree} onChange={(e) => setCard({ ...card, agree: e.target.checked })} />
+          <span>I confirm the traveller details are correct and accept the fare rules, the airline&apos;s conditions of carriage and trip27&apos;s terms of use.</span>
+        </label>
+            {errors.agree && <p role="alert" className="text-xs font-medium text-accent-600 mt-1">{errors.agree}</p>}
+            {hostedSlot && <div className="mt-4">{hostedSlot}</div>}
+          </>
+        ) : (
+          <>
         {mode !== "live" && (
           <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             {mode === "demo" ? "Demo" : "Test"} mode: no card is charged. Use test card <b>4242 4242 4242 4242</b>, any future date and any CVC.
@@ -137,7 +157,9 @@ export default function Payment({
           <input type="checkbox" className="w-4 h-4 mt-0.5" checked={card.agree} onChange={(e) => setCard({ ...card, agree: e.target.checked })} />
           <span>I confirm the traveller details are correct and accept the fare rules, the airline&apos;s conditions of carriage and trip27&apos;s terms of use.</span>
         </label>
-        {errors.agree && <p role="alert" className="text-xs font-medium text-accent-600 mt-1">{errors.agree}</p>}
+            {errors.agree && <p role="alert" className="text-xs font-medium text-accent-600 mt-1">{errors.agree}</p>}
+          </>
+        )}
       </div>
     </div>
   );

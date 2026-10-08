@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import type { BaggageService, Offer, PassengerInput, SeatMap, SelectedService } from "@/lib/types";
+import type { BaggageService, CreateOrderInput, Offer, Order, PassengerInput, SeatMap, SelectedService } from "@/lib/types";
 import { fromQuery } from "@/lib/search";
 import { formatMoney } from "@/lib/format";
 import PassengerForms, { validatePassengers, type Contact } from "./PassengerForms";
@@ -11,6 +11,7 @@ import SeatSelection, { type SeatSelections } from "./SeatSelection";
 import Extras from "./Extras";
 import Payment, { validateCard, type Card } from "./Payment";
 import Summary from "./Summary";
+import CardPayment, { type PaymentsConfig } from "./CardPayment";
 import ModeBanner from "../ModeBanner";
 
 const STEPS = ["Travellers", "Seats", "Extras", "Payment"] as const;
@@ -37,6 +38,8 @@ export default function Checkout({ offerId }: { offerId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [payments, setPayments] = useState<PaymentsConfig | null>(null);
+  const [flowBooking, setFlowBooking] = useState<CreateOrderInput | null>(null);
 
   // Load the latest offer (price can change since search).
   useEffect(() => {
@@ -53,6 +56,7 @@ export default function Checkout({ offerId }: { offerId: string }) {
         setOffer(j.offer);
         setBaggage(j.baggage || []);
         setMode(j.mode);
+        setPayments(j.payments || null);
         setPax((prev) =>
           prev.length
             ? prev
@@ -132,12 +136,7 @@ export default function Checkout({ offerId }: { offerId: string }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const pay = async () => {
-    const e = validateCard(card);
-    setErrors(e);
-    if (Object.keys(e).length) return;
-    setSubmitting(true);
-    setSubmitError(null);
+  const buildBooking = (): CreateOrderInput => {
     const phone = `+${contact.dial}${contact.phone.replace(/\D/g, "").replace(/^0+/, "")}`;
     // Infants travel on an adult's lap: link each infant to a different adult.
     const adults = pax.filter((p) => p.type === "adult");
@@ -160,21 +159,41 @@ export default function Checkout({ offerId }: { offerId: string }) {
           return { id, quantity: q, supplierAmount: b.supplierAmount, displayAmount: b.price.amount, label: b.label };
         }),
     ];
-    // NOTE: card details are validated in the browser only and never sent to
-    // our server. In production, replace the card form with your payment
-    // gateway's hosted fields and charge the customer before creating the order.
+    return { offerId: offer.id, passengers, services, contact: { email: contact.email, phone } };
+  };
+
+  const onBooked = (order: Order) => {
+    try {
+      sessionStorage.setItem("trip27:order:" + order.id, JSON.stringify({ ...order, sliceLabels }));
+    } catch {}
+    router.replace(`/booking/${encodeURIComponent(order.id)}`);
+  };
+
+  const pay = async () => {
+    if (payments) {
+      // Card details are collected by Checkout.com's secure component.
+      if (!card.agree) return setErrors({ agree: "Please accept the fare rules and terms" });
+      setErrors({});
+      setSubmitError(null);
+      setFlowBooking(buildBooking());
+      return;
+    }
+    const e = validateCard(card);
+    setErrors(e);
+    if (Object.keys(e).length) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    // Demo / no gateway: card details are validated in the browser only and
+    // never sent anywhere.
     try {
       const r = await fetch(api("/api/orders"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerId: offer.id, passengers, services, contact: { email: contact.email, phone } }),
+        body: JSON.stringify(buildBooking()),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Booking failed. You have not been charged.");
-      try {
-        sessionStorage.setItem("trip27:order:" + j.order.id, JSON.stringify({ ...j.order, sliceLabels }));
-      } catch {}
-      router.replace(`/booking/${encodeURIComponent(j.order.id)}`);
+      onBooked(j.order);
     } catch (err) {
       setSubmitError((err as Error).message);
       setSubmitting(false);
@@ -210,21 +229,44 @@ export default function Checkout({ offerId }: { offerId: string }) {
           {step === 0 && <PassengerForms offer={offer} pax={pax} setPax={setPax} contact={contact} setContact={setContact} errors={errors} />}
           {step === 1 && <SeatSelection offer={offer} seatMaps={seatMaps} pax={pax} seats={seats} setSeats={setSeats} />}
           {step === 2 && <Extras offer={offer} baggage={baggage} pax={pax} bags={bags} setBags={setBags} />}
-          {step === 3 && <Payment offer={offer} pax={pax} seats={seats} bags={bagLines} card={card} setCard={setCard} errors={errors} sliceLabels={sliceLabels} mode={mode} />}
+          {step === 3 && (
+            <Payment
+              offer={offer}
+              pax={pax}
+              seats={seats}
+              bags={bagLines}
+              card={card}
+              setCard={(c) => {
+                setCard(c);
+                if (!c.agree) setFlowBooking(null);
+              }}
+              errors={errors}
+              sliceLabels={sliceLabels}
+              mode={mode}
+              hosted={!!payments}
+              hostedSlot={flowBooking ? <CardPayment booking={flowBooking} onBooked={onBooked} onBusy={setSubmitting} /> : null}
+            />
+          )}
 
           {submitError && <div role="alert" className="mt-4 rounded-xl border border-accent-400 bg-accent-500/10 px-4 py-3 text-sm font-medium text-accent-600">{submitError}</div>}
 
           <div className="mt-5 flex items-center justify-between gap-3">
             {step > 0 ? (
-              <button type="button" className="btn-ghost" onClick={() => setStep(step - 1)} disabled={submitting}>Back</button>
+              <button type="button" className="btn-ghost" onClick={() => { setFlowBooking(null); setStep(step - 1); }} disabled={submitting}>Back</button>
             ) : <span />}
             {step < 3 ? (
               <button type="button" className="btn-primary px-8" onClick={next}>
                 {step === 1 && !Object.keys(seats).length ? "Skip seats" : step === 2 && !bagLines.length ? "Continue without bags" : "Continue"}
               </button>
+            ) : flowBooking ? (
+              <span className="text-sm text-muted">Enter your card above to pay {formatMoney({ amount: lines.total, currency: lines.currency }, { decimals: true })}</span>
             ) : (
               <button type="button" className="btn-primary px-8 text-base" onClick={pay} disabled={submitting || expiresIn === 0}>
-                {submitting ? "Booking your flight…" : `Pay ${formatMoney({ amount: lines.total, currency: lines.currency }, { decimals: true })}`}
+                {submitting
+                  ? "Booking your flight…"
+                  : payments
+                    ? `Continue to pay ${formatMoney({ amount: lines.total, currency: lines.currency }, { decimals: true })}`
+                    : `Pay ${formatMoney({ amount: lines.total, currency: lines.currency }, { decimals: true })}`}
               </button>
             )}
           </div>

@@ -20,7 +20,7 @@ With no `DUFFEL_ACCESS_TOKEN`, the site runs in **demo mode** on built-in sample
 
 Before going live:
 
-- **Customer payments.** Orders are paid from your Duffel balance (`payments: [{ type: "balance" }]`). The card form in `components/checkout/Payment.tsx` only checks the card in the browser and never sends card data to the server. Before taking real bookings, replace it with your gateway's hosted card fields (for example Stripe, Checkout.com, Network International or Duffel Payments). Charge the customer first, then call `/api/orders`.
+- **Customer payments.** With the `CKO_*` variables set, customers pay by card through Checkout.com Flow (card data never touches this server). The flow is: `/api/payments/session` prices the booking on the server and opens a payment session (authorise only) → the customer pays in Flow → `/api/payments/complete` checks the authorised amount, books with the airline, then captures. If the airline booking fails the payment is voided, so the customer is never charged for a failed booking. Airlines are paid from your Duffel balance. Without `CKO_*` the checkout shows a demo card form that charges nothing.
 - **Safety switch.** With a `duffel_live_…` token, bookings are blocked until you set `ALLOW_LIVE_BOOKINGS=true`.
 - **Currency.** Duffel prices come in your account's currency. Non-AED prices are converted for display using `FX_RATES_TO_AED`, and the supplier is always paid the exact original amount. Use a live FX feed in production, or ask Duffel to bill in AED.
 - **Your margin.** `SERVICE_FEE_AED` adds a per-booking fee to the displayed total, which you collect through your gateway.
