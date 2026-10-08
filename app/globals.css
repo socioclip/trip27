@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-ink: #13112b;
+  --color-brand-50: #f3f0ff;
+  --color-brand-100: #e7e1ff;
+  --color-brand-200: #cfc3ff;
+  --color-brand-300: #ab97ff;
+  --color-brand-400: #8a6bff;
+  --color-brand-500: #6c44f5;
+  --color-brand-600: #5a2fe0;
+  --color-brand-700: #4a24bd;
+  --color-brand-800: #3a1d93;
+  --color-brand-900: #241260;
+  --color-accent-400: #ff8a5b;
+  --color-accent-500: #ff6a33;
+  --color-accent-600: #ec5420;
+  --color-mint-500: #12b981;
+  --color-surface: #f5f6fb;
+  --color-line: #e6e7f0;
+  --color-muted: #6b6f86;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body { background: var(--color-surface); color: var(--color-ink); }
+
+@utility card { @apply bg-white rounded-2xl border border-line shadow-[0_1px_2px_rgba(19,17,43,0.04)]; }
+@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500; }
+@utility btn-primary { @apply btn bg-accent-500 text-white hover:bg-accent-600 px-5 py-3; }
+@utility btn-brand { @apply btn bg-brand-600 text-white hover:bg-brand-700 px-5 py-3; }
+@utility btn-ghost { @apply btn border border-line bg-white text-ink hover:border-brand-300 hover:bg-brand-50 px-4 py-2.5; }
+@utility field { @apply w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none transition placeholder:text-muted/70 focus:border-brand-500 focus:ring-4 focus:ring-brand-100; }
+@utility label { @apply block text-xs font-semibold uppercase tracking-wide text-muted mb-1.5; }
+@utility chip { @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 text-sm font-medium; }
+
+.skeleton { background: linear-gradient(90deg, #eceef6 25%, #f6f7fb 37%, #eceef6 63%); background-size: 400% 100%; animation: sk 1.4s ease infinite; }
+@keyframes sk { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+input[type="range"] { accent-color: var(--color-brand-600); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--color-brand-600); }
+
+@media print {
+  header, footer, .no-print { display: none !important; }
+  body { background: white; }
+}
