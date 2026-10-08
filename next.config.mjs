@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "/trip27";
+// Path the site is served under. Empty = site root (trip27.me).
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 const nextConfig = {
   basePath: basePath || undefined,
@@ -7,8 +8,12 @@ const nextConfig = {
   images: { unoptimized: true },
   poweredByHeader: false,
   async redirects() {
-    // Send visitors of the bare domain to the site.
-    return basePath ? [{ source: "/", destination: basePath, permanent: false, basePath: false }] : [];
+    if (basePath) return [{ source: "/", destination: basePath, permanent: false, basePath: false }];
+    // The site used to live under /trip27; keep old links working.
+    return [
+      { source: "/trip27", destination: "/", permanent: true },
+      { source: "/trip27/:path*", destination: "/:path*", permanent: true },
+    ];
   },
 };
 export default nextConfig;
