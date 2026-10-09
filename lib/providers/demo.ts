@@ -552,5 +552,10 @@ export const demoProvider: FlightProvider = {
   async getOrder(id) {
     return ORDERS.get(id) ?? null;
   },
+
+  async listOrders(email) {
+    const want = email.toLowerCase();
+    return [...ORDERS.values()].filter((o) => o.contactEmail.toLowerCase() === want);
+  },
 };
 

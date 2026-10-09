@@ -25,6 +25,7 @@ Before going live:
 - **Currency.** Duffel prices come in your account's currency. Non-AED prices are converted for display using `FX_RATES_TO_AED`, and the supplier is always paid the exact original amount. Use a live FX feed in production, or ask Duffel to bill in AED.
 - **Your margin.** `SERVICE_FEE_AED` adds a per-booking fee to the displayed total, which you collect through your gateway.
 - **Emails.** Booking confirmations are sent through Resend when `RESEND_API_KEY` and `EMAIL_FROM` are set (see `lib/email.ts`). To email any customer, verify your own domain in Resend. A failed email never fails the booking.
+- **Customer accounts.** Customers sign in at `/login` with their email: they get an 8-character code (and a one-click link) by email, with no password and no database. A signed, httpOnly session cookie lasts 30 days. **My bookings** (`/account/bookings`) lists every order whose contact email matches, upcoming first. New orders store the email in Duffel order metadata (`contact_email`). Older orders are matched by passenger email. Set `AUTH_SECRET` in production, and verify your sending domain in Resend so codes reach every customer. Without email configured, the demo site shows the code on screen.
 - **Booking lookup.** `/booking/[orderId]` shows any order by ID. Add a check against email or last name before exposing it publicly.
 
 ## Deploy
@@ -39,9 +40,13 @@ app/
   flights/page.tsx               Results (filters, sorting, fare families)
   flights/checkout/[offerId]/    Travellers → Seats → Extras → Payment
   booking/[orderId]/             Confirmation / itinerary
-  manage/                        Find a booking
+  manage/                        Find a booking by order number
+  login/                         Email-code sign-in
+  account/bookings/              My bookings (signed-in customers)
   api/places | search | offers/[id] | offers/[id]/seats | orders | orders/[id]
+  api/auth/request | verify | link | logout | me
 lib/
+  auth.ts                        Signed cookies, sign-in codes, session helpers
   providers/duffel.ts            Duffel API integration (server-only)
   providers/demo.ts              Demo data provider
   types.ts                       Shared, provider-agnostic types

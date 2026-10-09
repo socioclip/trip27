@@ -59,6 +59,31 @@ async function duffel<T = J>(path: string, init: { method?: string; body?: unkno
   return json?.data as T;
 }
 
+/** Fetches one page of a list endpoint, returning data plus the next cursor. */
+async function duffelPage(path: string): Promise<{ data: J[]; after: string | null }> {
+  const token = process.env.DUFFEL_ACCESS_TOKEN;
+  if (!token) throw new ProviderError("Duffel is not configured.", 500);
+  const res = await fetch(API + path, {
+    headers: { Authorization: `Bearer ${token}`, "Duffel-Version": "v2", Accept: "application/json", "Accept-Encoding": "gzip" },
+    cache: "no-store",
+  });
+  const json: J = await res.json().catch(() => null);
+  if (!res.ok) {
+    console.error("[duffel] GET", path, res.status, JSON.stringify(json?.errors ?? null).slice(0, 800));
+    throw new ProviderError("Couldn't load your bookings right now. Please try again.", 502);
+  }
+  return { data: json?.data || [], after: json?.meta?.after || null };
+}
+
+/** The email a Duffel order belongs to: our metadata first, then the passengers' emails. */
+function orderEmails(o: J): string[] {
+  const out = new Set<string>();
+  const m = o?.metadata?.contact_email;
+  if (m) out.add(String(m).toLowerCase());
+  for (const p of o?.passengers || []) if (p?.email) out.add(String(p.email).toLowerCase());
+  return [...out];
+}
+
 // ISO-8601 duration (e.g. P1DT2H35M) to minutes
 function isoMinutes(d: string | null | undefined) {
   if (!d) return 0;
@@ -339,7 +364,8 @@ export const duffelProvider: FlightProvider = {
         passengers,
         services: input.services.map((s) => ({ id: s.id, quantity: s.quantity })),
         payments: [{ type: "balance", currency: raw.total_currency, amount }],
-        metadata: { source: "trip27" },
+        // contact_email ties the order to the customer's trip27 account.
+        metadata: { source: "trip27", contact_email: input.contact.email.trim().toLowerCase() },
       },
     });
     return normOrder(order, input.contact.email);
@@ -348,10 +374,27 @@ export const duffelProvider: FlightProvider = {
   async getOrder(id) {
     try {
       const o = await duffel<J>(`/air/orders/${encodeURIComponent(id)}`);
-      return normOrder(o, "");
+      return normOrder(o, o?.metadata?.contact_email || "");
     } catch (e) {
       if (e instanceof ProviderError && e.status === 404) return null;
       throw e;
     }
+  },
+
+  async listOrders(email) {
+    // Duffel can't filter orders by email, so page through the account's
+    // orders and match. Capped so a very large account stays fast;
+    // move to a database index if you outgrow ~4,000 orders.
+    const want = email.toLowerCase();
+    const out: Order[] = [];
+    let after: string | null = null;
+    for (let page = 0; page < 20; page++) {
+      const q: string = `/air/orders?limit=200${after ? `&after=${encodeURIComponent(after)}` : ""}`;
+      const { data, after: next } = await duffelPage(q);
+      for (const o of data) if (orderEmails(o).includes(want)) out.push(normOrder(o, want));
+      if (!next) break;
+      after = next;
+    }
+    return out;
   },
 };

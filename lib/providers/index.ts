@@ -2,6 +2,7 @@ import "server-only";
 import { demoProvider } from "./demo";
 import { duffelProvider } from "./duffel";
 import type { FlightProvider } from "./types";
+import type { Order } from "../types";
 
 // Accept the Duffel token under an alternative variable name as well.
 if (!process.env.DUFFEL_ACCESS_TOKEN) {
@@ -27,4 +28,16 @@ export function providerMode() {
 // payment gateway is wired into the checkout (see README).
 export function liveBookingsAllowed() {
   return providerMode() !== "live" || process.env.ALLOW_LIVE_BOOKINGS === "true";
+}
+
+/** Every booking made with this email, across providers, newest first. */
+export async function listOrdersForEmail(email: string): Promise<Order[]> {
+  const sources: FlightProvider[] = [demoProvider];
+  if (process.env.DUFFEL_ACCESS_TOKEN) sources.push(duffelProvider);
+  const lists = await Promise.all(sources.map((p) => p.listOrders(email)));
+  const seen = new Set<string>();
+  return lists
+    .flat()
+    .filter((o) => (seen.has(o.id) ? false : (seen.add(o.id), true)))
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 }

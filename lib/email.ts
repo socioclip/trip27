@@ -142,3 +142,42 @@ export async function sendConfirmation(order: Order, to: string, bookingUrl: str
     return false;
   }
 }
+
+/** Sign-in email with a one-time code and a one-click link. */
+export async function sendSignInCode(to: string, code: string, link: string): Promise<boolean> {
+  if (!emailEnabled() || !to) return false;
+  const html = `<!doctype html><html><body style="margin:0;background:#f5f6fb;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f6fb;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e7f0">
+  <tr><td style="background:#241260;padding:22px 28px">
+    <div style="font-size:22px;font-weight:800;color:#ffffff">trip<span style="color:#ff6a33">27</span></div>
+  </td></tr>
+  <tr><td style="padding:26px 28px 8px">
+    <div style="font-size:20px;font-weight:800;color:#13112b">Your sign-in code</div>
+    <div style="font-size:14px;color:#6b6f86;margin-top:6px;line-height:1.5">Enter this code on trip27 to see your bookings. It expires in 10 minutes.</div>
+    <div style="margin:20px 0;background:#f3f0ff;border:1px solid #cfc3ff;border-radius:12px;padding:16px;text-align:center;font-size:30px;font-weight:800;letter-spacing:.18em;color:#3a1d93;font-family:ui-monospace,Menlo,Consolas,monospace">${esc(code)}</div>
+  </td></tr>
+  <tr><td align="center" style="padding:0 28px 26px">
+    <a href="${esc(link)}" style="display:inline-block;background:#ff6a33;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:12px">Or sign in with one click</a>
+    <div style="font-size:12px;color:#6b6f86;margin-top:16px;line-height:1.5">If you didn't ask to sign in, you can ignore this email. Nobody can get into your account without this code.</div>
+  </td></tr>
+</table>
+</td></tr></table></body></html>`;
+  const text = `Your trip27 sign-in code: ${code}\n\nIt expires in 10 minutes. Or sign in with one click: ${link}\n\nIf you didn't ask to sign in, ignore this email.`;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject: `${code} is your trip27 sign-in code`, html, text }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) {
+      console.error("[email] Resend error (sign-in)", res.status, (await res.text()).slice(0, 500));
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[email] sign-in send failed", (e as Error).message);
+    return false;
+  }
+}

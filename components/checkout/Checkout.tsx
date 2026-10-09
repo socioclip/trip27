@@ -41,6 +41,14 @@ export default function Checkout({ offerId }: { offerId: string }) {
   const [payments, setPayments] = useState<PaymentsConfig | null>(null);
   const [flowBooking, setFlowBooking] = useState<CreateOrderInput | null>(null);
 
+  // Signed-in customers: pre-fill the contact email so the booking shows in "My bookings".
+  useEffect(() => {
+    fetch(api("/api/auth/me"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => j.email && setContact((c) => (c.email ? c : { ...c, email: j.email })))
+      .catch(() => {});
+  }, []);
+
   // Load the latest offer (price can change since search).
   useEffect(() => {
     let cancelled = false;

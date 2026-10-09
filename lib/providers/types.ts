@@ -9,4 +9,6 @@ export interface FlightProvider {
   getSeatMaps(offerId: string): Promise<SeatMap[]>;
   createOrder(input: CreateOrderInput): Promise<Order>;
   getOrder(orderId: string): Promise<Order | null>;
+  /** All orders whose contact email matches (lower-cased), newest first. */
+  listOrders(email: string): Promise<Order[]>;
 }

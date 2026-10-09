@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Logo from "./Logo";
+import AccountMenu from "./account/AccountMenu";
 
 export default function Header() {
   return (
@@ -15,7 +16,7 @@ export default function Header() {
         <div className="ml-auto flex items-center gap-2 text-sm">
           <span className="hidden sm:inline-flex chip">AED</span>
           <span className="hidden sm:inline-flex chip">English</span>
-          <Link href="/manage" className="btn-ghost !py-2 text-sm">My booking</Link>
+          <AccountMenu />
         </div>
       </div>
     </header>
