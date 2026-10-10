@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   if (emailEnabled()) {
     const sent = await sendSignInCode(email, prettyCode(code), link);
     if (!sent) return NextResponse.json({ error: "We couldn't send the sign-in email. Please check the address and try again." }, { status: 502 });
-  } else if (providerMode() === "demo" || process.env.NODE_ENV !== "production") {
+  } else if ((await providerMode()) === "demo" || process.env.NODE_ENV !== "production") {
     // Demo site with no email service: show the code on screen so the flow can be tried.
     devCode = prettyCode(code);
   } else {

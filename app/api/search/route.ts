@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   }
   try {
     const offers = await searchAll(parsed.params);
-    return NextResponse.json({ offers, mode: providerMode() });
+    return NextResponse.json({ offers, mode: await providerMode() });
   } catch (e) {
     return fail(e);
   }

@@ -30,18 +30,32 @@ Before going live:
 
 ## Second flight source: Jinko
 
-Set `JINKO_API_KEY` (a sandbox key from dashboard.gojinko.com) to add [Jinko](https://gojinko.com) fares next to Duffel's. Search runs both suppliers in parallel and merges the results; if one fails or times out, the other's fares still show. Without a Duffel token, Jinko alone answers searches.
+[Jinko](https://gojinko.com) fares can appear next to Duffel's. Add `JINKO_API_KEY_SANDBOX` and/or `JINKO_API_KEY_PROD` (keys from dashboard.gojinko.com), then choose which one runs on the admin page (below). Search runs every enabled supplier in parallel and merges the results; if one fails or times out, the others' fares still show.
 
 How Jinko fares differ:
 
 - **Jinko takes the payment.** After the travellers step, trip27 creates the Jinko trip, Jinko prices it, and its secure payment page (Stripe) opens in a new tab. The customer pays Jinko directly, in `JINKO_CURRENCY` (USD by default). The AED price is an estimate, and `SERVICE_FEE_AED` doesn't apply, because trip27 never handles that money. Your earnings depend on Jinko commissions, which you arrange with Jinko.
 - **Booking status is polled.** Jinko's checkout has no return URL, so the trip27 tab goes to `/booking/jnkb_…`, which checks the trip every 5 seconds: awaiting payment → issuing ticket → confirmed (with the airline PNR) or not completed. Jinko emails the e-ticket confirmation.
 - **No seats or extra bags yet**, and one-way and round trips only (Jinko doesn't search multi-city). Jinko does support ancillaries; they're a possible next step.
-- **No database.** Jinko doesn't echo flight details back after booking, so the fare is kept as a signed, compressed snapshot inside the offer and order IDs (`jnko_…`, `jnkb_<trip>~…`). Set `AUTH_SECRET` in production: changing it invalidates those links.
+- **No database.** Jinko doesn't echo flight details back after booking, so the fare is kept as a signed, compressed snapshot inside the offer and order IDs (`jnko_…`, `jnkb_<trip>~…`), including which Jinko environment it came from. Set `AUTH_SECRET` in production: changing it invalidates those links.
 - **Not in My bookings.** Jinko can't list trips by email; customers use the booking link or Jinko's email.
-- **Live safety.** `JINKO_ENV` defaults to sandbox. With `JINKO_ENV=production`, bookings also need `ALLOW_LIVE_BOOKINGS=true`.
+- **Live safety.** Real Jinko bookings need Jinko Production switched on in the admin page *and* `ALLOW_LIVE_BOOKINGS=true`.
 
-In the sandbox, Jinko's test airline is Jinko Test Air (ZZ). Its flight ZZ101 books normally; other ZZ flight numbers simulate price changes, sell-outs and ticketing failures (see docs.gojinko.com/guides/testing-in-sandbox).
+In the sandbox, Jinko's test airline is Jinko Test Air (ZZ). Some ZZ flights simulate price changes, sell-outs and ticketing failures (see docs.gojinko.com/guides/testing-in-sandbox).
+
+## Supplier switches (admin)
+
+The back office at **/admin** (and at the root of **admin.<your domain>**, e.g. admin.trip27.me) switches suppliers on and off at runtime: Duffel on/off, and Jinko Off / Sandbox / Production (one Jinko environment at a time, so test and live fares never mix). Changes apply within seconds, with no redeploy. Keys stay in environment variables; the page only switches suppliers.
+
+Setup, once:
+
+1. **Edge Config.** In Vercel, Storage → Create → Edge Config, then connect it to this project. That adds `EDGE_CONFIG`.
+2. **Write access.** Create a Vercel access token (Account Settings → Tokens) with access to that store and add it as `VERCEL_API_TOKEN` (plus `VERCEL_TEAM_ID` if the store belongs to a team).
+3. **Admins.** Add `ADMIN_EMAILS` (comma-separated). Admins sign in with the normal email code.
+4. **Subdomain (optional).** Add `admin.trip27.me` under the project's Domains and create the DNS record Vercel shows.
+5. Redeploy.
+
+Without Edge Config the page is read-only and the site runs with defaults: Duffel and Jinko Sandbox on if their keys are set, Jinko Production off. A supplier without a key can't be switched on. Bookings already in progress keep using the supplier and Jinko environment they started with, even if an admin switches suppliers meanwhile.
 
 ## Deploy
 
@@ -58,6 +72,7 @@ app/
   manage/                        Find a booking by order number
   login/                         Email-code sign-in
   account/bookings/              My bookings (signed-in customers)
+  admin/                         Back office: supplier switches
   api/places | search | offers/[id] | offers/[id]/seats | orders | orders/[id]
   api/jinko/checkout             Creates the Jinko trip and returns its payment page
   api/auth/request | verify | link | logout | me
@@ -65,6 +80,8 @@ lib/
   auth.ts                        Signed cookies, sign-in codes, session helpers
   providers/duffel.ts            Duffel API integration (server-only)
   providers/jinko.ts             Jinko API integration (search, hosted checkout, status)
+  suppliers.ts                   Supplier switches (Edge Config) and supplier credentials
+  admin.ts                       Admin allowlist (ADMIN_EMAILS)
   providers/demo.ts              Demo data provider
   types.ts                       Shared, provider-agnostic types
   group.ts                       Grouping fares by itinerary, sort & filters
