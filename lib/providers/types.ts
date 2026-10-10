@@ -1,7 +1,7 @@
 import type { CreateOrderInput, Offer, OfferDetails, Order, Place, SearchParams, SeatMap } from "../types";
 
 export interface FlightProvider {
-  name: "duffel" | "demo";
+  name: "duffel" | "demo" | "jinko";
   live: boolean;
   searchPlaces(query: string): Promise<Place[]>;
   search(params: SearchParams): Promise<Offer[]>;

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getProvider, providerMode } from "@/lib/providers";
+import { providerMode, searchAll } from "@/lib/providers";
 import { fromQuery } from "@/lib/search";
 import { fail } from "@/lib/http";
 import { todayYmd } from "@/lib/format";
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "The departure date is in the past." }, { status: 400 });
   }
   try {
-    const offers = await getProvider().search(parsed.params);
+    const offers = await searchAll(parsed.params);
     return NextResponse.json({ offers, mode: providerMode() });
   } catch (e) {
     return fail(e);

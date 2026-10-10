@@ -56,6 +56,7 @@ export default function Payment({
   mode,
   hosted = false,
   hostedSlot,
+  external,
 }: {
   offer: Offer;
   pax: PassengerInput[];
@@ -68,6 +69,8 @@ export default function Payment({
   mode: string;
   hosted?: boolean;
   hostedSlot?: React.ReactNode;
+  /** Fare paid on the supplier's own hosted checkout page. */
+  external?: "jinko";
 }) {
   const brand = /^4/.test(card.number) ? "Visa" : /^(5[1-5]|2[2-7])/.test(card.number) ? "Mastercard" : /^3[47]/.test(card.number) ? "Amex" : "";
   return (
@@ -113,7 +116,30 @@ export default function Payment({
             Secure payment
           </span>
         </div>
-        {hosted ? (
+        {external ? (
+          <>
+            {mode !== "live" && (
+              <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Sandbox: no real money is taken and no ticket is issued. Use the test card shown on the payment page (Stripe test cards such as <b>4242 4242 4242 4242</b> usually work).
+              </p>
+            )}
+            <p className="text-sm text-muted mb-4">
+              This fare is sold and ticketed by our partner Jinko. After you continue, their secure payment page (powered by Stripe) opens in a new tab.
+              {offer.supplierCurrency !== offer.total.currency && (
+                <>
+                  {" "}You&apos;ll be charged in <b className="text-ink">{offer.supplierCurrency}</b> — about{" "}
+                  <b className="text-ink">{formatMoney({ amount: Number(offer.supplierAmount), currency: offer.supplierCurrency }, { decimals: true })}</b>. The {offer.total.currency} price shown here is an estimate.
+                </>
+              )}{" "}
+              The airline&apos;s latest price is confirmed on the payment page before you pay.
+            </p>
+            <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+              <input type="checkbox" className="w-4 h-4 mt-0.5" checked={card.agree} onChange={(e) => setCard({ ...card, agree: e.target.checked })} />
+              <span>I confirm the traveller details are correct and accept the fare rules, the airline&apos;s conditions of carriage, trip27&apos;s terms of use and Jinko&apos;s terms of sale.</span>
+            </label>
+            {errors.agree && <p role="alert" className="text-xs font-medium text-accent-600 mt-1">{errors.agree}</p>}
+          </>
+        ) : hosted ? (
           <>
             {mode !== "live" && (
               <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">

@@ -198,7 +198,10 @@ export interface CreateOrderInput {
 export interface Order {
   id: string;
   bookingReference: string;
-  status: "confirmed" | "pending";
+  // awaiting_payment / failed only occur for suppliers with their own hosted checkout (Jinko).
+  status: "confirmed" | "pending" | "awaiting_payment" | "failed";
+  statusNote?: string;
+  supplierReference?: string; // e.g. Jinko's JNK-… reference, for support
   createdAt: string;
   total: Money;
   supplierAmount: string;
@@ -210,6 +213,7 @@ export interface Order {
   contactEmail: string;
   emailSent?: boolean;
   live: boolean;
+  provider?: "duffel" | "demo" | "jinko";
 }
 
 export class ProviderError extends Error {
