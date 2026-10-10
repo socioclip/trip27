@@ -49,11 +49,18 @@ export const JINKO_ORDER_PREFIX = "jnkb_";
 const env = (k: string) => (process.env[k] || "").trim();
 
 export function jinkoEnabled() {
-  return !!env("JINKO_API_KEY");
+  return !!jinkoKey();
+}
+
+// JINKO_API_KEY is the main key; JINKO_API_KEY_SANDBOX is accepted as a
+// sandbox-only alternative (it always talks to Jinko's sandbox).
+function jinkoKey() {
+  return env("JINKO_API_KEY") || env("JINKO_API_KEY_SANDBOX");
 }
 
 /** Sandbox unless JINKO_ENV=production, so a key can never book for real by accident. */
 export function jinkoSandbox() {
+  if (!env("JINKO_API_KEY") && env("JINKO_API_KEY_SANDBOX")) return true;
   return !["production", "prod", "live"].includes(env("JINKO_ENV").toLowerCase());
 }
 
@@ -72,7 +79,7 @@ export const isJinkoId = (id: string) => id.startsWith(JINKO_OFFER_PREFIX) || id
 type J = any;
 
 async function jinko<T = J>(path: string, init: { method?: string; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
-  const key = env("JINKO_API_KEY");
+  const key = jinkoKey();
   if (!key) throw new ProviderError("Jinko is not configured.", 500);
   const base = (env("JINKO_API_BASE") || (jinkoSandbox() ? SANDBOX : PROD)).replace(/\/$/, "");
   const requestId = randomUUID();
@@ -107,7 +114,7 @@ async function jinko<T = J>(path: string, init: { method?: string; body?: unknow
     if (res.status === 410 || code === "QUOTE_EXPIRED" || code === "OFFER_EXPIRED" || code === "TRIP_EXPIRED")
       throw new ProviderError("This fare has expired or sold out. Please search again.", 410);
     if (res.status === 404) throw new ProviderError("Not found.", 404);
-    if (res.status === 401) throw new ProviderError("Flight supplier login failed. Check JINKO_API_KEY and JINKO_ENV.", 502);
+    if (res.status === 401) throw new ProviderError("Flight supplier login failed. Check the Jinko API key and JINKO_ENV.", 502);
     const msg = res.status >= 500 ? "The flight supplier had a problem. Please try again." : json?.error?.message || `Supplier error (${res.status})`;
     throw new ProviderError(msg, res.status >= 500 || res.status === 429 ? 502 : 400);
   }
