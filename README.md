@@ -49,13 +49,13 @@ The back office at **/admin** (and at the root of **admin.<your domain>**, e.g. 
 
 Setup, once:
 
-1. **Edge Config.** In Vercel, Storage → Create → Edge Config, then connect it to this project. That adds `EDGE_CONFIG`.
+1. **Global Config** (formerly Edge Config). In Vercel, Storage → Create → Global Config, then connect it to this project. That adds `GLOBAL_CONFIG`.
 2. **Write access.** Create a Vercel access token (Account Settings → Tokens) with access to that store and add it as `VERCEL_API_TOKEN` (plus `VERCEL_TEAM_ID` if the store belongs to a team).
 3. **Admins.** Add `ADMIN_EMAILS` (comma-separated). Admins sign in with the normal email code.
 4. **Subdomain (optional).** Add `admin.trip27.me` under the project's Domains and create the DNS record Vercel shows.
 5. Redeploy.
 
-Without Edge Config the page is read-only and the site runs with defaults: Duffel and Jinko Sandbox on if their keys are set, Jinko Production off. A supplier without a key can't be switched on. Bookings already in progress keep using the supplier and Jinko environment they started with, even if an admin switches suppliers meanwhile.
+Without Global Config the page is read-only and the site runs with defaults: Duffel and Jinko Sandbox on if their keys are set, Jinko Production off. A supplier without a key can't be switched on. Bookings already in progress keep using the supplier and Jinko environment they started with, even if an admin switches suppliers meanwhile.
 
 ## Deploy
 
@@ -80,7 +80,7 @@ lib/
   auth.ts                        Signed cookies, sign-in codes, session helpers
   providers/duffel.ts            Duffel API integration (server-only)
   providers/jinko.ts             Jinko API integration (search, hosted checkout, status)
-  suppliers.ts                   Supplier switches (Edge Config) and supplier credentials
+  suppliers.ts                   Supplier switches (Global Config) and supplier credentials
   admin.ts                       Admin allowlist (ADMIN_EMAILS)
   providers/demo.ts              Demo data provider
   types.ts                       Shared, provider-agnostic types

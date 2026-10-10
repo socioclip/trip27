@@ -141,9 +141,9 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
           <p className="font-bold">Read-only: switches can&apos;t be saved yet</p>
           <p className="mt-1">
             {state.edgeConfig.connected ? (
-              <>Edge Config is connected, but saving also needs a Vercel access token in <code className="font-mono">VERCEL_API_TOKEN</code> (and <code className="font-mono">VERCEL_TEAM_ID</code> if the store belongs to a team).</>
+              <>Global Config is connected, but saving also needs a Vercel access token in <code className="font-mono">VERCEL_API_TOKEN</code> (and <code className="font-mono">VERCEL_TEAM_ID</code> if the store belongs to a team), then a redeploy.</>
             ) : (
-              <>Create an Edge Config store in Vercel (Storage → Edge Config) and connect it to this project, which adds <code className="font-mono">EDGE_CONFIG</code>. Then add a Vercel access token as <code className="font-mono">VERCEL_API_TOKEN</code> and redeploy.</>
+              <>Create a Global Config store in Vercel (Storage → Global Config) and connect it to this project, which adds <code className="font-mono">GLOBAL_CONFIG</code>. Then add a Vercel access token as <code className="font-mono">VERCEL_API_TOKEN</code> and redeploy.</>
             )}
           </p>
         </div>
