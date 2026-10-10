@@ -142,10 +142,29 @@ function carrier(code: string | undefined, name?: string): Carrier {
   return { code: c, name: name || c, logo: c ? LOGO(c) : "" };
 }
 
+// Jinko's *_city fields are often IATA city codes ("LON", "DXB"), not names.
+function cityName(city: string | undefined, airportCode: string | undefined): string {
+  const c = (city || "").trim();
+  const a = airportCode ? airport(airportCode) : undefined;
+  if (c && !/^[A-Z]{3}$/.test(c)) return c;
+  return CITY_CODES[c]?.city || a?.city || (c ? airport(c)?.city : undefined) || c || airportCode || "";
+}
+
 function endpoint(code: string | undefined, city?: string): Endpoint {
   const a = code ? airport(code) : undefined;
-  return { code: code || "", name: a?.name || city || code || "", city: city || a?.city || code || "", terminal: null };
+  const name = cityName(city, code);
+  return { code: code || "", name: a?.name || name || code || "", city: name, terminal: null };
 }
+
+// Jinko sends IATA aircraft codes ("388"); name the common long-haul ones.
+const AIRCRAFT: Record<string, string> = {
+  "388": "Airbus A380-800", "380": "Airbus A380", "359": "Airbus A350-900", "351": "Airbus A350-1000", "35K": "Airbus A350-1000",
+  "333": "Airbus A330-300", "332": "Airbus A330-200", "339": "Airbus A330-900neo", "321": "Airbus A321", "32Q": "Airbus A321neo",
+  "32N": "Airbus A320neo", "320": "Airbus A320", "319": "Airbus A319", "77W": "Boeing 777-300ER", "773": "Boeing 777-300",
+  "772": "Boeing 777-200", "77L": "Boeing 777-200LR", "789": "Boeing 787-9", "788": "Boeing 787-8", "78X": "Boeing 787-10",
+  "744": "Boeing 747-400", "74H": "Boeing 747-8", "738": "Boeing 737-800", "7M8": "Boeing 737 MAX 8", "7M9": "Boeing 737 MAX 9",
+};
+const aircraftName = (code: string | undefined) => (code ? AIRCRAFT[code.toUpperCase()] || code : "");
 
 function flightNumber(airline: string, raw: string | undefined) {
   let n = String(raw || "").trim().toUpperCase().replace(/\s+/g, "");
@@ -172,7 +191,7 @@ function normLeg(leg: J, idx: number, fare: J): Slice {
       carrier: carrier(code, g.airline_name || leg.airline_name),
       operatingCarrier: g.operating_carrier && g.operating_carrier.toUpperCase() !== code ? carrier(g.operating_carrier) : null,
       flightNumber: flightNumber(code, g.flight_number),
-      aircraft: g.aircraft || "",
+      aircraft: aircraftName(g.aircraft),
       cabin,
       checkedBags: checked,
       carryOnBags: carry,
