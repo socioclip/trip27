@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "crypto";
 import { seal, unseal } from "../auth";
+import { getFlags, jinkoKey, liveBookingsSwitch, type JinkoEnv } from "../suppliers";
 import { airport, CITY_CODES } from "../airports";
 import { round2, toDisplay } from "../money";
 import {
@@ -48,40 +49,19 @@ export const JINKO_ORDER_PREFIX = "jnkb_";
 
 const env = (k: string) => (process.env[k] || "").trim();
 
-export function jinkoEnabled() {
-  return !!jinkoKey();
-}
-
-// JINKO_API_KEY is the main key; JINKO_API_KEY_SANDBOX is accepted as a
-// sandbox-only alternative (it always talks to Jinko's sandbox).
-function jinkoKey() {
-  return env("JINKO_API_KEY") || env("JINKO_API_KEY_SANDBOX");
-}
-
-/** Sandbox unless JINKO_ENV=production, so a key can never book for real by accident. */
-export function jinkoSandbox() {
-  if (!env("JINKO_API_KEY") && env("JINKO_API_KEY_SANDBOX")) return true;
-  return !["production", "prod", "live"].includes(env("JINKO_ENV").toLowerCase());
-}
-
-export function jinkoMode() {
-  return jinkoSandbox() ? ("test" as const) : ("live" as const);
-}
-
-/** A live Jinko key also needs ALLOW_LIVE_BOOKINGS=true, like a live Duffel token. */
-export function jinkoBookingsAllowed() {
-  return jinkoSandbox() || env("ALLOW_LIVE_BOOKINGS") === "true";
-}
+/** Jinko fares come from one environment; old IDs without one are sandbox. */
+const envOf = (snap: { e?: JinkoEnv }): JinkoEnv => (snap.e === "prod" ? "prod" : "sandbox");
+const modeOf = (e: JinkoEnv) => (e === "prod" ? ("live" as const) : ("test" as const));
 
 export const isJinkoId = (id: string) => id.startsWith(JINKO_OFFER_PREFIX) || id.startsWith(JINKO_ORDER_PREFIX);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type J = any;
 
-async function jinko<T = J>(path: string, init: { method?: string; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
-  const key = jinkoKey();
-  if (!key) throw new ProviderError("Jinko is not configured.", 500);
-  const base = (env("JINKO_API_BASE") || (jinkoSandbox() ? SANDBOX : PROD)).replace(/\/$/, "");
+async function jinko<T = J>(e: JinkoEnv, path: string, init: { method?: string; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
+  const key = jinkoKey(e);
+  if (!key) throw new ProviderError("This supplier is not configured.", 503);
+  const base = (env(e === "prod" ? "JINKO_API_BASE_PROD" : "JINKO_API_BASE") || (e === "prod" ? PROD : SANDBOX)).replace(/\/$/, "");
   const requestId = randomUUID();
   let res: Response;
   try {
@@ -98,7 +78,7 @@ async function jinko<T = J>(path: string, init: { method?: string; body?: unknow
       signal: AbortSignal.timeout(init.timeoutMs ?? 30000),
     });
   } catch (e) {
-    console.error("[jinko]", init.method || "GET", path, requestId, (e as Error).message);
+    console.error("[jinko]", e, init.method || "GET", path, requestId, (e as Error).message);
     throw new ProviderError("The flight supplier didn't respond. Please try again.", 502);
   }
   const text = await res.text();
@@ -110,11 +90,11 @@ async function jinko<T = J>(path: string, init: { method?: string; body?: unknow
   }
   if (!res.ok) {
     const code: string = json?.error?.code || "";
-    console.error("[jinko]", init.method || "GET", path, res.status, code, requestId, (json?.error?.message || text).slice(0, 800));
+    console.error("[jinko]", e, init.method || "GET", path, res.status, code, requestId, (json?.error?.message || text).slice(0, 800));
     if (res.status === 410 || code === "QUOTE_EXPIRED" || code === "OFFER_EXPIRED" || code === "TRIP_EXPIRED")
       throw new ProviderError("This fare has expired or sold out. Please search again.", 410);
     if (res.status === 404) throw new ProviderError("Not found.", 404);
-    if (res.status === 401) throw new ProviderError("Flight supplier login failed. Check the Jinko API key and JINKO_ENV.", 502);
+    if (res.status === 401) throw new ProviderError(`Flight supplier login failed. Check the Jinko ${e} API key.`, 502);
     const msg = res.status >= 500 ? "The flight supplier had a problem. Please try again." : json?.error?.message || `Supplier error (${res.status})`;
     throw new ProviderError(msg, res.status >= 500 || res.status === 429 ? 502 : 400);
   }
@@ -247,6 +227,7 @@ function international(slices: Slice[]) {
 
 interface Snapshot {
   v: 1;
+  e?: JinkoEnv; // environment the fare came from (absent on early sandbox IDs)
   t: string; // trip_item_token
   o: J; // Jinko FlightOffer with only the chosen fare
   p: Pax;
@@ -327,9 +308,11 @@ function jinkoTrip(p: SearchParams) {
 }
 
 async function search(p: SearchParams): Promise<Offer[]> {
+  const e = (await getFlags()).jinko;
+  if (e === "off") return [];
   const trip = jinkoTrip(p);
   if (!trip) return [];
-  const data = await jinko<J>("/v1/flight_search", {
+  const data = await jinko<J>(e, "/v1/flight_search", {
     method: "POST",
     timeoutMs: 28000,
     body: {
@@ -351,7 +334,7 @@ async function search(p: SearchParams): Promise<Offer[]> {
     for (const fare of o.fares || []) {
       if (!fare?.trip_item_token || !fare.total_price) continue;
       const exp = Math.min(Date.parse(fare.expires_at || "") || Infinity, Date.now() + 30 * 60_000);
-      const snap: Snapshot = { v: 1, t: fare.trip_item_token, o: { ...o, fares: [fare] }, p: pax, exp };
+      const snap: Snapshot = { v: 1, e, t: fare.trip_item_token, o: { ...o, fares: [fare] }, p: pax, exp };
       try {
         out.push(toOffer(snap, offerId(snap)));
       } catch {
@@ -386,6 +369,9 @@ export async function startJinkoCheckout(input: CreateOrderInput): Promise<Jinko
   const offer = toOffer(snap, input.offerId);
   if (input.passengers.length !== offer.passengers.length) throw new ProviderError("Passenger details are incomplete.");
   if (input.services.length) throw new ProviderError("Seats and extra bags can't be added to this fare yet.");
+  const e = envOf(snap);
+  // Real tickets and real money need the ALLOW_LIVE_BOOKINGS switch as well as Jinko production being on.
+  if (e === "prod" && !liveBookingsSwitch()) throw new ProviderError("Online booking is not enabled yet.", 503);
 
   const travelers = input.passengers.map((p) => ({
     first_name: p.givenName.trim(),
@@ -403,7 +389,7 @@ export async function startJinkoCheckout(input: CreateOrderInput): Promise<Jinko
       : {}),
   }));
 
-  const trip = await jinko<J>("/v1/trip", {
+  const trip = await jinko<J>(e, "/v1/trip", {
     method: "POST",
     body: {
       add_item: { trip_item_token: snap.t },
@@ -414,7 +400,7 @@ export async function startJinkoCheckout(input: CreateOrderInput): Promise<Jinko
   if (!tripId) throw new ProviderError("The supplier couldn't create this booking. Please try again.", 502);
 
   // Pricing happens here, synchronously. It can fail with 410 if the fare is gone.
-  const co = await jinko<J>("/v1/checkout", { method: "POST", timeoutMs: 55000, body: { trip_id: tripId } });
+  const co = await jinko<J>(e, "/v1/checkout", { method: "POST", timeoutMs: 55000, body: { trip_id: tripId } });
   if (!co?.checkout_url) throw new ProviderError("The supplier didn't return a payment page. Please try again.", 502);
 
   const charge = major(co.total_amount_money) || major(co.total_amount) || { amount: Number(offer.supplierAmount), currency: offer.supplierCurrency, dp: 2 };
@@ -453,9 +439,10 @@ async function getOrder(id: string): Promise<Order | null> {
   const parsed = readOrderId(id);
   if (!parsed) return null;
   const { tripId, snap } = parsed;
+  const e = envOf(snap);
   let t: J;
   try {
-    t = await jinko<J>(`/v1/trip/${encodeURIComponent(tripId)}`);
+    t = await jinko<J>(e, `/v1/trip/${encodeURIComponent(tripId)}`);
   } catch (e) {
     if (e instanceof ProviderError && e.status === 404) return null;
     throw e;
@@ -482,9 +469,16 @@ async function getOrder(id: string): Promise<Order | null> {
     })),
     services: [],
     contactEmail: t?.contact?.email || "",
-    live: !jinkoSandbox(),
+    live: e === "prod",
     provider: "jinko",
   };
+}
+
+/** test / live for a Jinko offer or order ID, from the environment its fare came from. */
+export function jinkoModeForId(id: string): "test" | "live" {
+  const offer = id.startsWith(JINKO_OFFER_PREFIX) ? unseal<Snapshot>(OFFER_PURPOSE, id.slice(JINKO_OFFER_PREFIX.length)) : null;
+  const snap = offer ?? readOrderId(id)?.snap ?? null;
+  return modeOf(snap ? envOf(snap) : "sandbox");
 }
 
 export const jinkoProvider: FlightProvider = {
