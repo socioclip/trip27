@@ -96,8 +96,13 @@ export function edgeConfigConnected() {
   return !!connectionString() && !!parseConnectionString(connectionString());
 }
 
+/** Vercel access token for writing the switches (VERCEL_API_KEY is accepted too). */
+function vercelToken() {
+  return env("VERCEL_API_TOKEN") || env("VERCEL_API_KEY");
+}
+
 export function edgeConfigWritable() {
-  return edgeConfigConnected() && !!env("VERCEL_API_TOKEN");
+  return edgeConfigConnected() && !!vercelToken();
 }
 
 // Short per-instance cache: Global Config reads are fast, but search calls this on every request.
@@ -140,14 +145,14 @@ export async function getAdminState() {
 /** Writes the flags to Global Config through the Vercel API. */
 export async function saveFlags(next: SupplierFlags, by: string): Promise<SupplierFlags> {
   const conn = parseConnectionString(connectionString());
-  if (!conn || !env("VERCEL_API_TOKEN")) throw new Error("Global Config isn't connected for writing. Connect a store (GLOBAL_CONFIG) and set VERCEL_API_TOKEN.");
+  if (!conn || !vercelToken()) throw new Error("Global Config isn't connected for writing. Connect a store (GLOBAL_CONFIG) and set VERCEL_API_TOKEN.");
   const value: SupplierFlags = { duffel: !!next.duffel, jinko: next.jinko, updatedAt: new Date().toISOString(), updatedBy: by };
   const team = env("VERCEL_TEAM_ID");
   const api = (env("VERCEL_API_URL") || "https://api.vercel.com").replace(/\/$/, "");
   const url = `${api}/v1/edge-config/${encodeURIComponent(conn.id)}/items${team ? `?teamId=${encodeURIComponent(team)}` : ""}`;
   const res = await fetch(url, {
     method: "PATCH",
-    headers: { Authorization: `Bearer ${env("VERCEL_API_TOKEN")}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${vercelToken()}`, "Content-Type": "application/json" },
     body: JSON.stringify({ items: [{ operation: "upsert", key: KEY, value }] }),
     cache: "no-store",
     signal: AbortSignal.timeout(15000),
