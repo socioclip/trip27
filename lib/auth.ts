@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash, createHmac, randomInt, timingSafeEqual } from "crypto";
+import { deflateRawSync, inflateRawSync } from "zlib";
 import { cookies } from "next/headers";
 
 // ---------------------------------------------------------------------------
@@ -74,6 +75,33 @@ export function unsign<T extends { exp: number }>(purpose: string, token: string
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
   try {
     const data = JSON.parse(Buffer.from(body, "base64url").toString()) as T;
+    if (typeof data.exp !== "number" || Date.now() > data.exp) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Like sign(), but deflate-compresses the payload so it stays short enough to
+ * live in a URL (used for supplier offer snapshots, since there's no database).
+ */
+export function seal(purpose: string, payload: object): string {
+  const body = deflateRawSync(Buffer.from(JSON.stringify(payload))).toString("base64url");
+  return `${body}.${mac(purpose, body)}`;
+}
+
+/** Opens a seal()ed token. Returns null if tampered with or expired. */
+export function unseal<T extends { exp: number }>(purpose: string, token: string | undefined | null): T | null {
+  if (!token || typeof token !== "string") return null;
+  const dot = token.lastIndexOf(".");
+  if (dot < 1) return null;
+  const body = token.slice(0, dot);
+  const given = Buffer.from(token.slice(dot + 1));
+  const expected = Buffer.from(mac(purpose, body));
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  try {
+    const data = JSON.parse(inflateRawSync(Buffer.from(body, "base64url")).toString()) as T;
     if (typeof data.exp !== "number" || Date.now() > data.exp) return null;
     return data;
   } catch {

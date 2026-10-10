@@ -40,6 +40,9 @@ export default function Checkout({ offerId }: { offerId: string }) {
   const [now, setNow] = useState(() => Date.now());
   const [payments, setPayments] = useState<PaymentsConfig | null>(null);
   const [flowBooking, setFlowBooking] = useState<CreateOrderInput | null>(null);
+  // Jinko fares are paid on Jinko's hosted checkout page and have no seat/bag steps yet.
+  const jinko = offerId.startsWith("jnko_");
+  const visibleSteps = jinko ? [0, 3] : [0, 1, 2, 3];
 
   // Signed-in customers: pre-fill the contact email so the booking shows in "My bookings".
   useEffect(() => {
@@ -140,7 +143,7 @@ export default function Checkout({ offerId }: { offerId: string }) {
         return;
       }
     }
-    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    setStep((s) => (jinko && s === 0 ? 3 : Math.min(s + 1, STEPS.length - 1)));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -177,7 +180,40 @@ export default function Checkout({ offerId }: { offerId: string }) {
     router.replace(`/booking/${encodeURIComponent(order.id)}`);
   };
 
+  // Jinko: create the trip on the server, then open Jinko's secure payment page
+  // in a new tab while this tab follows the booking status.
+  const payWithJinko = async () => {
+    if (!card.agree) return setErrors({ agree: "Please accept the fare rules and terms" });
+    setErrors({});
+    setSubmitError(null);
+    setSubmitting(true);
+    // Open the tab now, inside the click, so pop-up blockers allow it.
+    const tab = window.open("", "_blank");
+    try {
+      const r = await fetch(api("/api/jinko/checkout"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBooking()),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "We couldn't start the payment. You have not been charged.");
+      try {
+        sessionStorage.setItem("trip27:pay:" + j.orderId, JSON.stringify({ url: j.checkoutUrl, charge: j.charge, priceChanged: j.priceChanged, sliceLabels }));
+      } catch {}
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = j.checkoutUrl;
+      }
+      router.push(`/booking/${encodeURIComponent(j.orderId)}`);
+    } catch (err) {
+      tab?.close();
+      setSubmitError((err as Error).message);
+      setSubmitting(false);
+    }
+  };
+
   const pay = async () => {
+    if (jinko) return payWithJinko();
     if (payments) {
       // Card details are collected by Checkout.com's secure component.
       if (!card.agree) return setErrors({ agree: "Please accept the fare rules and terms" });
@@ -216,13 +252,14 @@ export default function Checkout({ offerId }: { offerId: string }) {
     <div className="mx-auto max-w-7xl px-4 py-6">
       <Link href={"error" in parsed ? "/" : `/flights?${qs}`} className="text-sm font-semibold text-brand-600 hover:underline">← Back to results</Link>
 
-      <ol className="mt-4 mb-6 grid grid-cols-4 gap-2" aria-label="Booking steps">
+      <ol className={`mt-4 mb-6 grid gap-2 ${jinko ? "grid-cols-2" : "grid-cols-4"}`} aria-label="Booking steps">
         {STEPS.map((s, i) => (
+          !visibleSteps.includes(i) ? null :
           <li key={s}>
             <button type="button" disabled={i > step} onClick={() => i < step && setStep(i)} className="w-full text-left group" aria-current={i === step ? "step" : undefined}>
               <span className={`block h-1.5 rounded-full ${i <= step ? "bg-brand-600" : "bg-line"}`} />
               <span className={`mt-2 flex items-center gap-2 text-xs sm:text-sm font-semibold ${i === step ? "text-ink" : i < step ? "text-brand-600" : "text-muted"}`}>
-                <span className={`hidden sm:grid w-6 h-6 rounded-full place-items-center text-xs ${i < step ? "bg-brand-600 text-white" : i === step ? "bg-brand-100 text-brand-700" : "bg-line text-muted"}`}>{i < step ? "✓" : i + 1}</span>
+                <span className={`hidden sm:grid w-6 h-6 rounded-full place-items-center text-xs ${i < step ? "bg-brand-600 text-white" : i === step ? "bg-brand-100 text-brand-700" : "bg-line text-muted"}`}>{i < step ? "✓" : visibleSteps.indexOf(i) + 1}</span>
                 {s}
               </span>
             </button>
@@ -252,6 +289,7 @@ export default function Checkout({ offerId }: { offerId: string }) {
               sliceLabels={sliceLabels}
               mode={mode}
               hosted={!!payments}
+              external={jinko ? "jinko" : undefined}
               hostedSlot={flowBooking ? <CardPayment booking={flowBooking} onBooked={onBooked} onBusy={setSubmitting} /> : null}
             />
           )}
@@ -260,7 +298,7 @@ export default function Checkout({ offerId }: { offerId: string }) {
 
           <div className="mt-5 flex items-center justify-between gap-3">
             {step > 0 ? (
-              <button type="button" className="btn-ghost" onClick={() => { setFlowBooking(null); setStep(step - 1); }} disabled={submitting}>Back</button>
+              <button type="button" className="btn-ghost" onClick={() => { setFlowBooking(null); setStep(jinko && step === 3 ? 0 : step - 1); }} disabled={submitting}>Back</button>
             ) : <span />}
             {step < 3 ? (
               <button type="button" className="btn-primary px-8" onClick={next}>
@@ -271,8 +309,12 @@ export default function Checkout({ offerId }: { offerId: string }) {
             ) : (
               <button type="button" className="btn-primary px-8 text-base" onClick={pay} disabled={submitting || expiresIn === 0}>
                 {submitting
-                  ? "Booking your flight…"
-                  : payments
+                  ? jinko
+                    ? "Opening secure payment…"
+                    : "Booking your flight…"
+                  : jinko
+                    ? "Continue to secure payment"
+                    : payments
                     ? `Continue to pay ${formatMoney({ amount: lines.total, currency: lines.currency }, { decimals: true })}`
                     : `Pay ${formatMoney({ amount: lines.total, currency: lines.currency }, { decimals: true })}`}
               </button>

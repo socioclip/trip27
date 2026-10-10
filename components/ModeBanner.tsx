@@ -8,7 +8,7 @@ export default function ModeBanner({ mode }: { mode: string }) {
   if (mode === "test")
     return (
       <div className="mb-4 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm text-sky-900">
-        <b>Test mode:</b> results come from Duffel&apos;s sandbox. Bookings are not ticketed and no money is taken.
+        <b>Test mode:</b> results come from our flight suppliers&apos; sandboxes. Bookings are not ticketed and no money is taken.
       </div>
     );
   return null;
