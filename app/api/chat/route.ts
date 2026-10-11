@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { ContentBlockParam, MessageParam, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
 import { NextResponse } from "next/server";
 import { allow } from "@/lib/auth";
@@ -8,15 +7,15 @@ import { providerMode } from "@/lib/providers";
 import { ProviderError } from "@/lib/types";
 import { systemPrompt } from "@/lib/chat/prompt";
 import { runTool, TOOLS, toolStatus, type ToolContext } from "@/lib/chat/tools";
+import { callModel, chatProvider, type ChatProvider } from "@/lib/chat/llm";
 import { MAX_USER_MESSAGE, type ChatEvent, type ChatRef, type ChatRequest } from "@/lib/chat/protocol";
 
-// Chat assistant: Claude with trip27's own search tools. Stateless; the browser
+// Chat assistant: Gemini or Claude (CHAT_PROVIDER) with trip27's own search tools. Stateless; the browser
 // sends the conversation back each time. It never books or takes payment.
 
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
 
-const MODEL = process.env.CHAT_MODEL || "claude-sonnet-5-5";
 const MAX_ROUNDS = 6; // model ↔ tools round trips per customer message
 const MAX_HISTORY_MESSAGES = 30;
 const MAX_HISTORY_CHARS = 60_000;
@@ -27,7 +26,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  if (!(await getFlags()).chat) return NextResponse.json({ error: "The chat assistant is switched off." }, { status: 503 });
+  const provider: ChatProvider | null = chatProvider();
+  if (!(await getFlags()).chat || !provider) return NextResponse.json({ error: "The chat assistant is switched off." }, { status: 503 });
   if (!sameOrigin(req)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
 
   const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "local";
@@ -49,9 +49,6 @@ export async function POST(req: Request) {
   const messages: MessageParam[] = [...history, { role: "user", content: message }];
   const added: MessageParam[] = []; // what this turn adds after the user message
   const mode = await providerMode();
-  // Tolerate stray whitespace or quotes pasted into the Vercel variable.
-  const apiKey = (process.env.ANTHROPIC_API_KEY || "").trim().replace(/^["']|["']$/g, "");
-  const client = new Anthropic({ apiKey });
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -61,24 +58,18 @@ export async function POST(req: Request) {
       try {
         for (let round = 0; round < MAX_ROUNDS; round++) {
           const last = round === MAX_ROUNDS - 1;
-          const s = client.messages.stream(
-            {
-              model: MODEL,
-              max_tokens: 1200,
-              system: [{ type: "text", text: systemPrompt(mode), cache_control: { type: "ephemeral" } }],
-              tools: TOOLS,
-              tool_choice: last ? { type: "none" } : { type: "auto" },
-              messages: [...messages, ...added],
-            },
-            { signal: req.signal }
-          );
-          s.on("text", (delta) => emit({ type: "text", delta }));
-          const msg = await s.finalMessage();
-          const content = msg.content.filter((b) => b.type === "text" || b.type === "tool_use") as ContentBlockParam[];
-          if (content.length) added.push({ role: "assistant", content });
-          if (msg.stop_reason !== "tool_use") break;
+          const turn = await callModel(provider, {
+            system: systemPrompt(mode),
+            tools: TOOLS,
+            messages: [...messages, ...added],
+            allowTools: !last,
+            onText: (delta) => emit({ type: "text", delta }),
+            signal: req.signal,
+          });
+          if (turn.content.length) added.push({ role: "assistant", content: turn.content });
+          if (!turn.wantsTools) break;
 
-          const uses = msg.content.filter((b) => b.type === "tool_use");
+          const uses = turn.content.filter((b) => b.type === "tool_use");
           const results: ToolResultBlockParam[] = [];
           // Sequential: keeps refs ordered and supplier load predictable.
           for (const u of uses) {
@@ -101,10 +92,10 @@ export async function POST(req: Request) {
         if (!req.signal.aborted) {
           console.error("[chat] failed", e);
           const status = (e as { status?: number })?.status;
-          if (status === 401) console.error("[chat] ANTHROPIC_API_KEY was rejected (401). Check the key in Vercel and that it hasn't been revoked.");
+          if (status === 401 || status === 403) console.error(`[chat] the ${provider} API key was rejected (${status}). Check it in Vercel.`);
           emit({
             type: "error",
-            message: status === 429 || status === 529 ? "The assistant is busy right now. Please try again in a minute." : "Sorry, something went wrong. Please try again.",
+            message: status === 429 || status === 503 || status === 529 ? "The assistant is busy right now. Please try again in a minute." : "Sorry, something went wrong. Please try again.",
           });
         }
       } finally {
@@ -129,7 +120,15 @@ function sanitizeBlock(b: unknown): ContentBlockParam | null {
   const o = b as Record<string, unknown>;
   if (o.type === "text" && typeof o.text === "string" && o.text) return { type: "text", text: o.text.slice(0, 8000) };
   if (o.type === "tool_use" && typeof o.id === "string" && typeof o.name === "string")
-    return { type: "tool_use", id: o.id, name: o.name, input: o.input && typeof o.input === "object" ? o.input : {} };
+    return {
+      type: "tool_use",
+      id: o.id,
+      name: o.name,
+      input: o.input && typeof o.input === "object" ? o.input : {},
+      // Gemini's thought signature and whether the call ID came from Gemini (see lib/chat/llm.ts).
+      ...(typeof o.signature === "string" && o.signature.length < 20_000 ? { signature: o.signature } : {}),
+      ...(o.gid === true ? { gid: true } : {}),
+    } as ContentBlockParam;
   if (o.type === "tool_result" && typeof o.tool_use_id === "string") {
     const content = typeof o.content === "string" ? o.content.slice(0, 8000) : "";
     return { type: "tool_result", tool_use_id: o.tool_use_id, content, ...(o.is_error === true ? { is_error: true } : {}) };

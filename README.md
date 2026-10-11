@@ -59,13 +59,13 @@ Without Global Config the page is read-only and the site runs with defaults: Duf
 
 ## Chat assistant ("Ask trip27")
 
-A chat button on every page (except checkout, payment, sign-in and admin) lets customers plan a trip in plain words: "cheapest weekend in Tbilisi next month", "non-stop to London, back a week later, 2 adults". Claude searches with trip27's own code and shows the best itineraries as cards; the customer books on the usual checkout.
+A chat button on every page (except checkout, payment, sign-in and admin) lets customers plan a trip in plain words: "cheapest weekend in Tbilisi next month", "non-stop to London, back a week later, 2 adults". The model searches with trip27's own code and shows the best itineraries as cards; the customer books on the usual checkout.
 
-- **Setup.** Add `ANTHROPIC_API_KEY` (and optionally `CHAT_MODEL`, default `claude-sonnet-5-5`). Without a key the chat button doesn't appear.
+- **Setup.** The chat runs on **Gemini** or **Claude** (`lib/chat/llm.ts`). Add `GEMINI_API_KEY` (Google AI Studio, has a free tier) and/or `ANTHROPIC_API_KEY`, and pick one with `CHAT_PROVIDER=gemini|anthropic` (empty = Gemini if its key is set). `CHAT_MODEL` overrides the model (defaults `gemini-3.8-flash` / `claude-sonnet-5-5`). Without a key the chat button doesn't appear. Note: on Gemini's free tier Google may use prompts to improve its products; switch to a paid tier before real customer traffic.
 - **Same results as search.** The assistant's tools (`lib/chat/tools.ts`) call `searchAll`, `getOffer` and the grouping/filter code the results page uses, so the admin supplier switches, AED pricing and `SERVICE_FEE_AED` all apply, and Duffel and Jinko fares show side by side.
 - **It never books or takes payment.** Tools: `find_airports`, `search_flights`, `get_fare_details` (re-prices a fare and reads its rules) and `start_checkout`, which only shows a button to `/flights/checkout/[offerId]`. Payment stays in Checkout.com Flow (or Jinko's page for Jinko fares). The assistant is told never to ask for card or passport details.
 - **No database.** The browser keeps the conversation in sessionStorage and sends it back with each message; the server (`app/api/chat/route.ts`) re-validates it and streams the reply as NDJSON. Fares are referred to by short refs (F1, F2…) so long supplier IDs stay out of the model's context.
-- **Cost controls.** 25 messages per IP per 15 minutes, up to 3 searches and 6 model round trips per message, trimmed history, prompt caching on the system prompt and tools. Each message costs Claude API usage plus supplier searches (Jinko searches use Jinko credits).
+- **Cost controls.** 25 messages per IP per 15 minutes, up to 3 searches and 6 model round trips per message, trimmed history, prompt caching on Claude. Each message costs model usage plus supplier searches (Jinko searches use Jinko credits).
 - **Off switch.** /admin has a "Chat assistant" switch (stored with the supplier flags in Global Config), so you can turn it off instantly without a redeploy.
 - **Timeouts.** A message that searches can take 20–40 s; `/api/chat` allows 120 s.
 
@@ -91,7 +91,7 @@ app/
   admin/                         Back office: supplier switches
   api/places | search | offers/[id] | offers/[id]/seats | orders | orders/[id]
   api/jinko/checkout             Creates the Jinko trip and returns its payment page
-  api/chat                       Chat assistant (Claude + trip27 search tools, streaming)
+  api/chat                       Chat assistant (Gemini or Claude + trip27 search tools, streaming)
   api/auth/request | verify | link | logout | me
 lib/
   auth.ts                        Signed cookies, sign-in codes, session helpers
@@ -99,7 +99,7 @@ lib/
   providers/jinko.ts             Jinko API integration (search, hosted checkout, status)
   suppliers.ts                   Supplier switches (Global Config) and supplier credentials
   admin.ts                       Admin allowlist (ADMIN_EMAILS)
-  chat/                          Chat assistant: tools, system prompt, wire format
+  chat/                          Chat assistant: model adapters, tools, system prompt, wire format
   providers/demo.ts              Demo data provider
   types.ts                       Shared, provider-agnostic types
   group.ts                       Grouping fares by itinerary, sort & filters

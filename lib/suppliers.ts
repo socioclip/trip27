@@ -54,7 +54,8 @@ export function credentials() {
     duffelMode: !d ? null : d.startsWith("duffel_live") ? ("live" as const) : ("test" as const),
     jinkoSandbox: !!jinkoKey("sandbox"),
     jinkoProd: !!jinkoKey("prod"),
-    chat: !!env("ANTHROPIC_API_KEY"),
+    // The chat runs on Gemini or Claude (see lib/chat/llm.ts).
+    chat: !!(env("GEMINI_API_KEY") || env("GOOGLE_API_KEY") || env("ANTHROPIC_API_KEY")),
   };
 }
 
