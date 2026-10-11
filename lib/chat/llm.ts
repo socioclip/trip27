@@ -146,7 +146,30 @@ function geminiTools(tools: Tool[]) {
 
 let callSeq = 0;
 
+// Gemini 3 thinks at "medium" by default, which made chat replies take 30-45 s.
+// Flight search needs little reasoning, so ask for "low" (CHAT_THINKING overrides;
+// "default" sends nothing). If the API rejects the setting, retry once without it.
+let thinkingRejected = false;
+function thinkingConfig() {
+  const level = (env("CHAT_THINKING") || "low").toLowerCase();
+  if (thinkingRejected || level === "default") return undefined;
+  return { thinkingLevel: level };
+}
+
 async function callGemini(call: ModelCall): Promise<ModelTurn> {
+  try {
+    return await callGeminiOnce(call, thinkingConfig());
+  } catch (e) {
+    if (e instanceof ModelError && e.status === 400 && /thinking/i.test(e.message) && !thinkingRejected) {
+      console.warn("[chat] Gemini rejected thinkingConfig; continuing without it", e.message.slice(0, 300));
+      thinkingRejected = true;
+      return callGeminiOnce(call, undefined);
+    }
+    throw e;
+  }
+}
+
+async function callGeminiOnce(call: ModelCall, thinking: Record<string, unknown> | undefined): Promise<ModelTurn> {
   const model = chatModel("gemini");
   const base = (env("GEMINI_API_URL") || "https://generativelanguage.googleapis.com").replace(/\/$/, "");
   const url = `${base}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
@@ -158,7 +181,7 @@ async function callGemini(call: ModelCall): Promise<ModelTurn> {
       contents: toGemini(call.messages),
       tools: geminiTools(call.tools),
       toolConfig: { functionCallingConfig: { mode: call.allowTools ? "AUTO" : "NONE" } },
-      generationConfig: { maxOutputTokens: 2048, temperature: 0.4 },
+      generationConfig: { maxOutputTokens: 2048, temperature: 0.4, ...(thinking ? { thinkingConfig: thinking } : {}) },
     }),
     signal: call.signal,
   });
