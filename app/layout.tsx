@@ -3,6 +3,7 @@ import "@fontsource-variable/plus-jakarta-sans";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SiteAnalytics from "@/components/SiteAnalytics";
 
 export const metadata: Metadata = {
   title: { default: "trip27 — Book cheap flights", template: "%s · trip27" },
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />
+        <SiteAnalytics />
       </body>
     </html>
   );
