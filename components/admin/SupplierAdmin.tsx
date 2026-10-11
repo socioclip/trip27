@@ -42,6 +42,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
   const [state, setState] = useState(initial);
   const [duffel, setDuffel] = useState(initial.flags.duffel);
   const [jinko, setJinko] = useState<JinkoChoice>(initial.flags.jinko);
+  const [chat, setChat] = useState(initial.flags.chat !== false);
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +50,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
 
   const c = state.credentials;
   const writable = state.edgeConfig.writable;
-  const dirty = duffel !== state.flags.duffel || jinko !== state.flags.jinko;
+  const dirty = duffel !== state.flags.duffel || jinko !== state.flags.jinko || chat !== (state.flags.chat !== false);
 
   const rows: Row[] = useMemo(
     () => [
@@ -101,13 +102,14 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
       const r = await fetch(api("/api/admin/suppliers"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ duffel, jinko, confirmLive }),
+        body: JSON.stringify({ duffel, jinko, chat, confirmLive }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Couldn't save.");
       setState(j);
       setDuffel(j.flags.duffel);
       setJinko(j.flags.jinko);
+      setChat(j.flags.chat !== false);
       setSaved(true);
     } catch (e) {
       setError((e as Error).message);
@@ -118,6 +120,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
 
   const running = state.running;
   const liveNow = [running.duffel && `Duffel (${c.duffelMode === "live" ? "live" : "test"})`, running.jinko === "sandbox" && "Jinko Sandbox", running.jinko === "prod" && "Jinko Production"].filter(Boolean);
+  const chatRunning = running.chat === true;
   const anyLiveSelected = jinko === "prod" || (duffel && c.duffelMode === "live");
 
   return (
@@ -126,6 +129,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
         <span>
           <span className="label inline mr-2">Running now</span>
           <b>{liveNow.length ? liveNow.join(" + ") : "No suppliers — searches return no flights"}</b>
+          <span className="text-muted"> · chat {chatRunning ? "on" : "off"}</span>
         </span>
         {state.stored && state.flags.updatedAt && (
           <span className="text-muted">
@@ -175,6 +179,23 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
         ))}
       </div>
 
+      <div className="card p-5 flex items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-extrabold">Chat assistant</h2>
+            <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-50 text-brand-700">Site feature</span>
+          </div>
+          <p className="text-sm text-muted mt-1">
+            &ldquo;Ask trip27&rdquo; on the site: customers describe a trip, the assistant searches the suppliers above and hands the chosen fare to the normal checkout. It never books or takes payment itself. Runs on Gemini or Claude (CHAT_PROVIDER). Each conversation uses AI model usage plus supplier searches.
+          </p>
+          <p className="text-xs mt-2">
+            {c.chat ? <span className="text-mint-500 font-semibold">✓ Key set</span> : <span className="text-accent-600 font-semibold">Key missing</span>}
+            <span className="text-muted"> · <code className="font-mono">GEMINI_API_KEY</code> or <code className="font-mono">ANTHROPIC_API_KEY</code></span>
+          </p>
+        </div>
+        <Switch on={chat && c.chat} disabled={!c.chat || !writable || saving} onChange={(v) => { setSaved(false); setError(null); setChat(v); }} label="Chat assistant on or off" />
+      </div>
+
       {anyLiveSelected && !state.liveBookings && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           <b>Live fares will show, but booking them is blocked.</b> Real bookings also need <code className="font-mono">ALLOW_LIVE_BOOKINGS=true</code> in Vercel, as a second safety switch.
@@ -201,7 +222,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
         <div className="flex items-center gap-3">
           {saved && !dirty && <span className="text-sm font-semibold text-mint-500">✓ Saved — live within seconds</span>}
           {dirty && !confirming && (
-            <button type="button" className="btn-ghost" onClick={() => { setDuffel(state.flags.duffel); setJinko(state.flags.jinko); setError(null); }} disabled={saving}>
+            <button type="button" className="btn-ghost" onClick={() => { setDuffel(state.flags.duffel); setJinko(state.flags.jinko); setChat(state.flags.chat !== false); setError(null); }} disabled={saving}>
               Discard
             </button>
           )}
