@@ -49,7 +49,9 @@ export async function POST(req: Request) {
   const messages: MessageParam[] = [...history, { role: "user", content: message }];
   const added: MessageParam[] = []; // what this turn adds after the user message
   const mode = await providerMode();
-  const client = new Anthropic();
+  // Tolerate stray whitespace or quotes pasted into the Vercel variable.
+  const apiKey = (process.env.ANTHROPIC_API_KEY || "").trim().replace(/^["']|["']$/g, "");
+  const client = new Anthropic({ apiKey });
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -99,6 +101,7 @@ export async function POST(req: Request) {
         if (!req.signal.aborted) {
           console.error("[chat] failed", e);
           const status = (e as { status?: number })?.status;
+          if (status === 401) console.error("[chat] ANTHROPIC_API_KEY was rejected (401). Check the key in Vercel and that it hasn't been revoked.");
           emit({
             type: "error",
             message: status === 429 || status === 529 ? "The assistant is busy right now. Please try again in a minute." : "Sorry, something went wrong. Please try again.",
