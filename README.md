@@ -57,6 +57,10 @@ Setup, once:
 
 Without Global Config the page is read-only and the site runs with defaults: Duffel and Jinko Sandbox on if their keys are set, Jinko Production off. A supplier without a key can't be switched on. Bookings already in progress keep using the supplier and Jinko environment they started with, even if an admin switches suppliers meanwhile.
 
+## Analytics
+
+Vercel Web Analytics (`@vercel/analytics`) counts visitors and page views; see the project's **Analytics** tab in Vercel. It's added in `components/SiteAnalytics.tsx`, which keeps the back office out of the stats, replaces booking and fare IDs in URLs with placeholders, and drops query strings except UTM tags. Analytics must be enabled for the project in Vercel (Analytics tab → Enable).
+
 ## Deploy
 
 Push to GitHub and import into Vercel (or run `npm run build && npm start` on any Node 20+ host). Add the environment variables in the host's settings. Search can take 20–25 s on some routes, so allow at least 60 s for API functions (`maxDuration` is already set).
