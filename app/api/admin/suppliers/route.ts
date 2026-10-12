@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const current = await getAdminState();
   // Older clients don't send the chat switch: keep what's stored.
   const chat = typeof body.chat === "boolean" ? body.chat : current.flags.chat !== false;
-  if (chat && body.chat === true && !c.chat) return NextResponse.json({ error: "The chat assistant has no GEMINI_API_KEY or ANTHROPIC_API_KEY set in Vercel." }, { status: 400 });
+  if (chat && body.chat === true && !c.chat) return NextResponse.json({ error: "The chat assistant has no AI model key (GROQ_API_KEY, GEMINI_API_KEY or ANTHROPIC_API_KEY) set in Vercel." }, { status: 400 });
   if (duffel && !c.duffel) return NextResponse.json({ error: "Duffel has no access token set in Vercel." }, { status: 400 });
   if (jinko === "sandbox" && !c.jinkoSandbox) return NextResponse.json({ error: "Jinko Sandbox has no API key set in Vercel." }, { status: 400 });
   if (jinko === "prod" && !c.jinkoProd) return NextResponse.json({ error: "Jinko Production has no API key set in Vercel." }, { status: 400 });

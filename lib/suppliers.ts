@@ -20,7 +20,7 @@ export interface SupplierFlags {
   duffel: boolean;
   /** One Jinko environment at a time, so test and live fares never mix. */
   jinko: JinkoChoice;
-  /** The chat assistant on the site (needs ANTHROPIC_API_KEY). Missing in older saved flags = on. */
+  /** The chat assistant on the site (needs an AI model key, see lib/chat/llm.ts). Missing in older saved flags = on. */
   chat?: boolean;
   updatedAt?: string;
   updatedBy?: string;
@@ -54,8 +54,8 @@ export function credentials() {
     duffelMode: !d ? null : d.startsWith("duffel_live") ? ("live" as const) : ("test" as const),
     jinkoSandbox: !!jinkoKey("sandbox"),
     jinkoProd: !!jinkoKey("prod"),
-    // The chat runs on Gemini or Claude (see lib/chat/llm.ts).
-    chat: !!(env("GEMINI_API_KEY") || env("GOOGLE_API_KEY") || env("ANTHROPIC_API_KEY")),
+    // The chat runs on Groq, a self-hosted model, Gemini or Claude (see lib/chat/llm.ts).
+    chat: !!(env("GROQ_API_KEY") || (env("LLM_BASE_URL") && env("LLM_MODEL")) || env("GEMINI_API_KEY") || env("GOOGLE_API_KEY") || env("ANTHROPIC_API_KEY")),
   };
 }
 

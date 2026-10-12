@@ -7,10 +7,11 @@ import { providerMode } from "@/lib/providers";
 import { ProviderError } from "@/lib/types";
 import { systemPrompt } from "@/lib/chat/prompt";
 import { runTool, TOOLS, toolStatus, type ToolContext } from "@/lib/chat/tools";
-import { callModel, chatProvider, type ChatProvider } from "@/lib/chat/llm";
+import { callModel, chatProviders } from "@/lib/chat/llm";
 import { MAX_USER_MESSAGE, type ChatEvent, type ChatRef, type ChatRequest } from "@/lib/chat/protocol";
 
-// Chat assistant: Gemini or Claude (CHAT_PROVIDER) with trip27's own search tools. Stateless; the browser
+// Chat assistant: an AI model (Groq, Gemini, Claude or a self-hosted one, with
+// automatic fallback; see lib/chat/llm.ts) with trip27's own search tools. Stateless; the browser
 // sends the conversation back each time. It never books or takes payment.
 
 export const maxDuration = 120;
@@ -26,8 +27,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const provider: ChatProvider | null = chatProvider();
-  if (!(await getFlags()).chat || !provider) return NextResponse.json({ error: "The chat assistant is switched off." }, { status: 503 });
+  if (!(await getFlags()).chat || !chatProviders().length) return NextResponse.json({ error: "The chat assistant is switched off." }, { status: 503 });
   if (!sameOrigin(req)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
 
   const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "local";
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
   if (!message) return NextResponse.json({ error: "Type a message." }, { status: 400 });
   if (message.length > MAX_USER_MESSAGE) return NextResponse.json({ error: "That message is too long." }, { status: 400 });
 
-  const history = trimHistory(sanitizeHistory(body.history));
+  const history = compactOldResults(trimHistory(sanitizeHistory(body.history)));
   const refs = sanitizeRefs(body.refs);
   const messages: MessageParam[] = [...history, { role: "user", content: message }];
   const added: MessageParam[] = []; // what this turn adds after the user message
@@ -58,7 +58,7 @@ export async function POST(req: Request) {
       try {
         for (let round = 0; round < MAX_ROUNDS; round++) {
           const last = round === MAX_ROUNDS - 1;
-          const turn = await callModel(provider, {
+          const turn = await callModel({
             system: systemPrompt(mode),
             tools: TOOLS,
             messages: [...messages, ...added],
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
         if (!req.signal.aborted) {
           console.error("[chat] failed", e);
           const status = (e as { status?: number })?.status;
-          if (status === 401 || status === 403) console.error(`[chat] the ${provider} API key was rejected (${status}). Check it in Vercel.`);
+          if (status === 401 || status === 403) console.error(`[chat] an AI model API key was rejected (${status}). Check the keys in Vercel.`);
           emit({
             type: "error",
             message: status === 429 || status === 503 || status === 529 ? "The assistant is busy right now. Please try again in a minute." : "Sorry, something went wrong. Please try again.",
@@ -128,6 +128,7 @@ function sanitizeBlock(b: unknown): ContentBlockParam | null {
       // Gemini's thought signature and whether the call ID came from Gemini (see lib/chat/llm.ts).
       ...(typeof o.signature === "string" && o.signature.length < 20_000 ? { signature: o.signature } : {}),
       ...(o.gid === true ? { gid: true } : {}),
+      ...(o.src === "gemini" ? { src: "gemini" } : {}),
     } as ContentBlockParam;
   if (o.type === "tool_result" && typeof o.tool_use_id === "string") {
     const content = typeof o.content === "string" ? o.content.slice(0, 8000) : "";
@@ -164,6 +165,27 @@ function trimHistory(h: MessageParam[]): MessageParam[] {
   // The new message is a user turn, so the history must end with the assistant.
   while (list.length && list[list.length - 1].role !== "assistant") list = list.slice(0, -1);
   return list;
+}
+
+/**
+ * Earlier turns' tool results (mostly search listings) are shortened, which
+ * keeps every request small: free tiers limit tokens per minute, and the model
+ * can always search again. The current turn's results are sent in full.
+ */
+const OLD_RESULT_CHARS = 1500;
+function compactOldResults(h: MessageParam[]): MessageParam[] {
+  return h.map((m) =>
+    typeof m.content === "string" || m.role !== "user"
+      ? m
+      : {
+          ...m,
+          content: m.content.map((b) =>
+            b.type === "tool_result" && typeof b.content === "string" && b.content.length > OLD_RESULT_CHARS
+              ? { ...b, content: b.content.slice(0, OLD_RESULT_CHARS) + "\n… (older results shortened; search again for the full list)" }
+              : b
+          ),
+        }
+  );
 }
 
 function sanitizeRefs(raw: unknown): Record<string, ChatRef> {

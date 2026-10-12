@@ -186,11 +186,11 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
             <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-50 text-brand-700">Site feature</span>
           </div>
           <p className="text-sm text-muted mt-1">
-            &ldquo;Ask trip27&rdquo; on the site: customers describe a trip, the assistant searches the suppliers above and hands the chosen fare to the normal checkout. It never books or takes payment itself. Runs on Gemini or Claude (CHAT_PROVIDER). Each conversation uses AI model usage plus supplier searches.
+            &ldquo;Ask trip27&rdquo; on the site: customers describe a trip, the assistant searches the suppliers above and hands the chosen fare to the normal checkout. It never books or takes payment itself. Runs on Groq, Gemini, Claude or a self-hosted model, falling back to the next one if a provider is busy (CHAT_PROVIDER sets the order). Each conversation uses AI model usage plus supplier searches.
           </p>
           <p className="text-xs mt-2">
             {c.chat ? <span className="text-mint-500 font-semibold">✓ Key set</span> : <span className="text-accent-600 font-semibold">Key missing</span>}
-            <span className="text-muted"> · <code className="font-mono">GEMINI_API_KEY</code> or <code className="font-mono">ANTHROPIC_API_KEY</code></span>
+            <span className="text-muted"> · <code className="font-mono">GROQ_API_KEY</code>, <code className="font-mono">GEMINI_API_KEY</code>, <code className="font-mono">ANTHROPIC_API_KEY</code> or <code className="font-mono">LLM_BASE_URL</code></span>
           </p>
         </div>
         <Switch on={chat && c.chat} disabled={!c.chat || !writable || saving} onChange={(v) => { setSaved(false); setError(null); setChat(v); }} label="Chat assistant on or off" />
