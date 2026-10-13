@@ -2,6 +2,7 @@ import "server-only";
 import { demoProvider } from "./demo";
 import { duffelProvider } from "./duffel";
 import { isJinkoId, jinkoModeForId, jinkoProvider } from "./jinko";
+import { apeiroProvider, isApeiroId } from "./apeiro";
 import type { FlightProvider } from "./types";
 import type { Offer, Order, SearchParams } from "../types";
 import { credentials, duffelToken, getFlags, liveBookingsSwitch, type SupplierFlags } from "../suppliers";
@@ -16,7 +17,7 @@ const duffelConfigured = () => !!process.env.DUFFEL_ACCESS_TOKEN;
 /** No supplier credentials at all: the site runs on built-in demo data. */
 const demoOnly = () => {
   const c = credentials();
-  return !c.duffel && !c.jinkoSandbox && !c.jinkoProd;
+  return !c.duffel && !c.jinkoSandbox && !c.jinkoProd && !c.apeiro;
 };
 
 /**
@@ -27,6 +28,7 @@ const demoOnly = () => {
  */
 export function getProvider(offerOrOrderId?: string): FlightProvider {
   if (offerOrOrderId && isJinkoId(offerOrOrderId)) return jinkoProvider;
+  if (offerOrOrderId && isApeiroId(offerOrOrderId)) return apeiroProvider;
   // Demo IDs are always served by the demo provider, so links keep working
   // even after a Duffel token is added.
   if (offerOrOrderId && (offerOrOrderId.startsWith("demo_") || offerOrOrderId.startsWith("ord_demo_"))) return demoProvider;
@@ -39,6 +41,7 @@ function searchProviders(flags: SupplierFlags): FlightProvider[] {
   const list: FlightProvider[] = [];
   if (flags.duffel) list.push(duffelProvider);
   if (flags.jinko !== "off") list.push(jinkoProvider);
+  if (flags.apeiro) list.push(apeiroProvider);
   return list;
 }
 
@@ -76,7 +79,7 @@ function duffelMode() {
 export async function providerMode() {
   if (demoOnly()) return "demo" as const;
   const f = await getFlags();
-  const modes = [f.duffel ? duffelMode() : null, f.jinko === "sandbox" ? "test" : f.jinko === "prod" ? "live" : null].filter(Boolean);
+  const modes = [f.duffel ? duffelMode() : null, f.jinko === "sandbox" ? "test" : f.jinko === "prod" ? "live" : null, f.apeiro ? "live" : null].filter(Boolean);
   if (!modes.length) return "live" as const;
   return modes.includes("test") ? ("test" as const) : ("live" as const);
 }

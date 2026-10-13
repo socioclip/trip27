@@ -103,6 +103,10 @@ export interface Offer {
   itineraryKey: string; // same flights => same key; used to group fare brands
   checkedBags: number;
   carryOnBags: number;
+  /** Supplier label shown on the card for compare-only sources (e.g. "Apeirotrip"). */
+  supplier?: string;
+  /** false = shown for price comparison only; can't go to checkout. */
+  bookable?: boolean;
 }
 
 export interface ItineraryGroup {

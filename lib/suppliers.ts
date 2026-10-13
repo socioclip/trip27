@@ -20,6 +20,8 @@ export interface SupplierFlags {
   duffel: boolean;
   /** One Jinko environment at a time, so test and live fares never mix. */
   jinko: JinkoChoice;
+  /** Apeirotrip fares, compare only (needs APEIRO_TOKEN). Missing in older saved flags = on. */
+  apeiro?: boolean;
   /** The chat assistant on the site (needs ANTHROPIC_API_KEY). Missing in older saved flags = on. */
   chat?: boolean;
   updatedAt?: string;
@@ -47,6 +49,11 @@ export function jinkoKey(e: JinkoEnv): string {
   return legacyEnv === e ? env("JINKO_API_KEY") : "";
 }
 
+/** Token for Apeirotrip's Amadeus Online Suite search (the `token` header its site sends). */
+export function apeiroToken() {
+  return env("APEIRO_TOKEN");
+}
+
 export function credentials() {
   const d = duffelToken();
   return {
@@ -54,6 +61,7 @@ export function credentials() {
     duffelMode: !d ? null : d.startsWith("duffel_live") ? ("live" as const) : ("test" as const),
     jinkoSandbox: !!jinkoKey("sandbox"),
     jinkoProd: !!jinkoKey("prod"),
+    apeiro: !!apeiroToken(),
     // The chat runs on Gemini or Claude (see lib/chat/llm.ts).
     chat: !!(env("GEMINI_API_KEY") || env("GOOGLE_API_KEY") || env("ANTHROPIC_API_KEY")),
   };
@@ -69,7 +77,7 @@ export function liveBookingsSwitch() {
 /** What the site does when Global Config has no value: use what's configured, never Jinko production. */
 export function defaultFlags(): SupplierFlags {
   const c = credentials();
-  return { duffel: c.duffel, jinko: c.jinkoSandbox ? "sandbox" : "off", chat: c.chat };
+  return { duffel: c.duffel, jinko: c.jinkoSandbox ? "sandbox" : "off", apeiro: c.apeiro, chat: c.chat };
 }
 
 function clean(v: unknown): SupplierFlags | null {
@@ -79,6 +87,7 @@ function clean(v: unknown): SupplierFlags | null {
   return {
     duffel: o.duffel === true,
     jinko,
+    apeiro: typeof o.apeiro === "boolean" ? o.apeiro : undefined,
     chat: typeof o.chat === "boolean" ? o.chat : undefined,
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : undefined,
     updatedBy: typeof o.updatedBy === "string" ? o.updatedBy : undefined,
@@ -89,7 +98,7 @@ function clean(v: unknown): SupplierFlags | null {
 export function effective(f: SupplierFlags): SupplierFlags {
   const c = credentials();
   const jinkoOk = f.jinko === "sandbox" ? c.jinkoSandbox : f.jinko === "prod" ? c.jinkoProd : true;
-  return { ...f, duffel: f.duffel && c.duffel, jinko: jinkoOk ? f.jinko : "off", chat: (f.chat ?? true) && c.chat };
+  return { ...f, duffel: f.duffel && c.duffel, jinko: jinkoOk ? f.jinko : "off", apeiro: (f.apeiro ?? true) && c.apeiro, chat: (f.chat ?? true) && c.chat };
 }
 
 /** Vercel now adds GLOBAL_CONFIG when a store is connected; older projects have EDGE_CONFIG. */
@@ -151,7 +160,7 @@ export async function getAdminState() {
 export async function saveFlags(next: SupplierFlags, by: string): Promise<SupplierFlags> {
   const conn = parseConnectionString(connectionString());
   if (!conn || !vercelToken()) throw new Error("Global Config isn't connected for writing. Connect a store (GLOBAL_CONFIG) and set VERCEL_API_TOKEN.");
-  const value: SupplierFlags = { duffel: !!next.duffel, jinko: next.jinko, chat: next.chat !== false, updatedAt: new Date().toISOString(), updatedBy: by };
+  const value: SupplierFlags = { duffel: !!next.duffel, jinko: next.jinko, apeiro: next.apeiro !== false, chat: next.chat !== false, updatedAt: new Date().toISOString(), updatedBy: by };
   const team = env("VERCEL_TEAM_ID");
   const api = (env("VERCEL_API_URL") || "https://api.vercel.com").replace(/\/$/, "");
   const url = `${api}/v1/edge-config/${encodeURIComponent(conn.id)}/items${team ? `?teamId=${encodeURIComponent(team)}` : ""}`;

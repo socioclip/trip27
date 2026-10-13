@@ -24,6 +24,7 @@ export default function ItineraryCard({
   const [open, setOpen] = useState<null | "fares" | "details">(null);
   const carriers = [...new Map(group.slices.flatMap((s) => s.segments.map((g) => [g.carrier.code, g.carrier]))).values()];
   const c = group.cheapest;
+  const compareOnly = c.bookable === false;
 
   return (
     <article className={`card overflow-hidden transition ${open ? "ring-2 ring-brand-200" : "hover:shadow-md"}`}>
@@ -33,6 +34,11 @@ export default function ItineraryCard({
           <div className="flex items-center gap-2.5">
             <AirlineLogo carrier={group.owner} size={30} />
             <p className="text-sm font-semibold truncate">{carriers.map((x) => x.name).join(" · ")}</p>
+            {c.supplier && (
+              <span className="ml-auto shrink-0 text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-800" title="Price from this supplier, for comparison">
+                via {c.supplier}
+              </span>
+            )}
           </div>
           {group.slices.map((s, i) => (
             <div key={i} className="grid grid-cols-[64px_1fr] sm:grid-cols-[84px_1fr] items-center gap-2">
@@ -55,6 +61,9 @@ export default function ItineraryCard({
             <p className="text-2xl font-extrabold text-brand-800 leading-tight">{formatMoney(c.total)}</p>
             <p className="text-[11px] text-muted">{travellers > 1 ? `Total for ${travellers} travellers` : "Per traveller"} · incl. taxes</p>
           </div>
+          {compareOnly ? (
+            <p className="text-xs font-semibold text-muted md:text-right max-w-[11rem]">Price comparison only — not bookable on trip27</p>
+          ) : (
           <button
             type="button"
             className="btn-primary !px-7"
@@ -64,6 +73,7 @@ export default function ItineraryCard({
           >
             {selecting === c.id ? "Loading…" : open === "fares" ? "Hide fares" : "Select"}
           </button>
+          )}
         </div>
       </div>
 

@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   if (!isAdmin || !email) return NextResponse.json({ error: "Not allowed." }, { status: 403 });
   if (!sameOrigin(req)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
 
-  let body: { duffel?: unknown; jinko?: unknown; chat?: unknown; confirmLive?: unknown };
+  let body: { duffel?: unknown; jinko?: unknown; apeiro?: unknown; chat?: unknown; confirmLive?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -33,6 +33,8 @@ export async function POST(req: Request) {
   // Older clients don't send the chat switch: keep what's stored.
   const chat = typeof body.chat === "boolean" ? body.chat : current.flags.chat !== false;
   if (chat && body.chat === true && !c.chat) return NextResponse.json({ error: "The chat assistant has no GEMINI_API_KEY or ANTHROPIC_API_KEY set in Vercel." }, { status: 400 });
+  const apeiro = typeof body.apeiro === "boolean" ? body.apeiro : current.flags.apeiro !== false;
+  if (apeiro && body.apeiro === true && !c.apeiro) return NextResponse.json({ error: "Apeirotrip has no APEIRO_TOKEN set in Vercel." }, { status: 400 });
   if (duffel && !c.duffel) return NextResponse.json({ error: "Duffel has no access token set in Vercel." }, { status: 400 });
   if (jinko === "sandbox" && !c.jinkoSandbox) return NextResponse.json({ error: "Jinko Sandbox has no API key set in Vercel." }, { status: 400 });
   if (jinko === "prod" && !c.jinkoProd) return NextResponse.json({ error: "Jinko Production has no API key set in Vercel." }, { status: 400 });
@@ -42,8 +44,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Confirm that Jinko Production sells real tickets." }, { status: 400 });
 
   try {
-    await saveFlags({ duffel, jinko, chat }, email);
-    console.info("[admin] supplier flags changed", JSON.stringify({ by: email, duffel, jinko, chat }));
+    await saveFlags({ duffel, jinko, apeiro, chat }, email);
+    console.info("[admin] supplier flags changed", JSON.stringify({ by: email, duffel, jinko, apeiro, chat }));
     return NextResponse.json(await getAdminState(), { headers: NO_STORE });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 502 });
