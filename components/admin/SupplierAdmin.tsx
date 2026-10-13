@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import type { AdminState, JinkoChoice } from "@/lib/suppliers";
 
 type Row = {
-  id: "duffel" | "sandbox" | "prod";
+  id: "duffel" | "sandbox" | "prod" | "apeiro";
   name: string;
   env: "Test" | "Live" | "—";
   envVar: string;
@@ -42,6 +42,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
   const [state, setState] = useState(initial);
   const [duffel, setDuffel] = useState(initial.flags.duffel);
   const [jinko, setJinko] = useState<JinkoChoice>(initial.flags.jinko);
+  const [apeiro, setApeiro] = useState(initial.flags.apeiro !== false);
   const [chat, setChat] = useState(initial.flags.chat !== false);
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -50,7 +51,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
 
   const c = state.credentials;
   const writable = state.edgeConfig.writable;
-  const dirty = duffel !== state.flags.duffel || jinko !== state.flags.jinko || chat !== (state.flags.chat !== false);
+  const dirty = duffel !== state.flags.duffel || jinko !== state.flags.jinko || apeiro !== (state.flags.apeiro !== false) || chat !== (state.flags.chat !== false);
 
   const rows: Row[] = useMemo(
     () => [
@@ -81,14 +82,24 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
         on: jinko === "prod",
         note: "Real fares. Customers pay Jinko and receive real tickets.",
       },
+      {
+        id: "apeiro",
+        name: "Apeirotrip",
+        env: "Live",
+        envVar: "APEIRO_TOKEN",
+        hasKey: c.apeiro,
+        on: apeiro,
+        note: "Live fares from apeirotrip.com (Amadeus Online Suite), shown for price comparison only. Not bookable on trip27.",
+      },
     ],
-    [c, duffel, jinko]
+    [c, duffel, jinko, apeiro]
   );
 
   const toggle = (r: Row, v: boolean) => {
     setSaved(false);
     setError(null);
     if (r.id === "duffel") return setDuffel(v);
+    if (r.id === "apeiro") return setApeiro(v);
     // Only one Jinko environment at a time.
     setJinko(v ? r.id : "off");
   };
@@ -102,13 +113,14 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
       const r = await fetch(api("/api/admin/suppliers"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ duffel, jinko, chat, confirmLive }),
+        body: JSON.stringify({ duffel, jinko, apeiro, chat, confirmLive }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Couldn't save.");
       setState(j);
       setDuffel(j.flags.duffel);
       setJinko(j.flags.jinko);
+      setApeiro(j.flags.apeiro !== false);
       setChat(j.flags.chat !== false);
       setSaved(true);
     } catch (e) {
@@ -119,7 +131,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
   };
 
   const running = state.running;
-  const liveNow = [running.duffel && `Duffel (${c.duffelMode === "live" ? "live" : "test"})`, running.jinko === "sandbox" && "Jinko Sandbox", running.jinko === "prod" && "Jinko Production"].filter(Boolean);
+  const liveNow = [running.duffel && `Duffel (${c.duffelMode === "live" ? "live" : "test"})`, running.jinko === "sandbox" && "Jinko Sandbox", running.jinko === "prod" && "Jinko Production", running.apeiro && "Apeirotrip (compare only)"].filter(Boolean);
   const chatRunning = running.chat === true;
   const anyLiveSelected = jinko === "prod" || (duffel && c.duffelMode === "live");
 
@@ -162,7 +174,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
                 {r.env !== "—" && (
                   <span className={`text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${r.env === "Live" ? "bg-accent-500/10 text-accent-600" : "bg-brand-50 text-brand-700"}`}>{r.env}</span>
                 )}
-                {r.id !== "duffel" && <span className="text-[11px] text-muted">one Jinko environment at a time</span>}
+                {(r.id === "sandbox" || r.id === "prod") && <span className="text-[11px] text-muted">one Jinko environment at a time</span>}
               </div>
               <p className="text-sm text-muted mt-1">{r.note}</p>
               <p className="text-xs mt-2">
@@ -222,7 +234,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
         <div className="flex items-center gap-3">
           {saved && !dirty && <span className="text-sm font-semibold text-mint-500">✓ Saved — live within seconds</span>}
           {dirty && !confirming && (
-            <button type="button" className="btn-ghost" onClick={() => { setDuffel(state.flags.duffel); setJinko(state.flags.jinko); setChat(state.flags.chat !== false); setError(null); }} disabled={saving}>
+            <button type="button" className="btn-ghost" onClick={() => { setDuffel(state.flags.duffel); setJinko(state.flags.jinko); setApeiro(state.flags.apeiro !== false); setChat(state.flags.chat !== false); setError(null); }} disabled={saving}>
               Discard
             </button>
           )}

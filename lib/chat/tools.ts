@@ -196,7 +196,8 @@ async function searchFlights(input: Input, ctx: ToolContext): Promise<string> {
   if (err) return `Can't search: ${err}`;
   if (slices[0].date < todayYmd()) return "Can't search: the departure date is in the past.";
 
-  const offers = await searchAll(params);
+  // The assistant only offers fares it can hand to checkout.
+  const offers = (await searchAll(params)).filter((o) => o.bookable !== false);
   const mode = await providerMode();
   const qs = toQuery(params, trip);
   const searchUrl = `/flights?${qs}`;

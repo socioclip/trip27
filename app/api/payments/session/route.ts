@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { fail } from "@/lib/http";
 import { liveBookingsAllowed } from "@/lib/providers";
 import { isJinkoId } from "@/lib/providers/jinko";
+import { isApeiroId } from "@/lib/providers/apeiro";
 import { quoteBooking, validateBooking } from "@/lib/booking";
 import { ckoEnabled, ckoPublicConfig, createPaymentSession, sign, toMinor, type BookingToken } from "@/lib/checkout-com";
 import type { CreateOrderInput } from "@/lib/types";
@@ -22,6 +23,7 @@ export async function POST(req: Request) {
   try {
     const booking = validateBooking(raw);
     if (booking.offerId.startsWith("demo_")) return NextResponse.json({ error: "Demo fares can't be paid for." }, { status: 400 });
+    if (isApeiroId(booking.offerId)) return NextResponse.json({ error: "Apeirotrip fares are for comparison only." }, { status: 400 });
     if (isJinkoId(booking.offerId)) return NextResponse.json({ error: "This fare is paid on the supplier's checkout page." }, { status: 400 });
     if (!liveBookingsAllowed()) return NextResponse.json({ error: "Online booking is not enabled yet." }, { status: 503 });
 

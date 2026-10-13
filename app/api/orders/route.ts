@@ -4,6 +4,7 @@ import { fail } from "@/lib/http";
 import { sendConfirmation } from "@/lib/email";
 import { validateBooking } from "@/lib/booking";
 import { isJinkoId } from "@/lib/providers/jinko";
+import { isApeiroId } from "@/lib/providers/apeiro";
 import { ckoEnabled } from "@/lib/checkout-com";
 import type { CreateOrderInput } from "@/lib/types";
 
@@ -22,6 +23,7 @@ export async function POST(req: Request) {
     const body = validateBooking(raw);
     const demo = body.offerId.startsWith("demo_");
     if (isJinkoId(body.offerId)) return NextResponse.json({ error: "This fare is paid on the supplier's checkout page." }, { status: 400 });
+    if (isApeiroId(body.offerId)) return NextResponse.json({ error: "Apeirotrip fares are for comparison only." }, { status: 400 });
     if (!demo && ckoEnabled()) return NextResponse.json({ error: "Payment is required to complete this booking." }, { status: 402 });
     if (!demo && !liveBookingsAllowed()) return NextResponse.json({ error: "Online booking is not enabled yet." }, { status: 503 });
     const order = await getProvider(body.offerId).createOrder(body);

@@ -9,7 +9,7 @@ export const DISPLAY_CURRENCY = (process.env.DISPLAY_CURRENCY || "AED").toUpperC
 function parseRates(): Record<string, number> {
   const raw =
     process.env.FX_RATES_TO_AED ||
-    "USD:3.6725,EUR:4.28,GBP:4.93,SAR:0.979,QAR:1.009,KWD:11.98,BHD:9.74,OMR:9.55";
+    "USD:3.6725,EUR:4.28,GBP:4.93,SAR:0.979,QAR:1.009,KWD:11.98,BHD:9.74,OMR:9.55,INR:0.0372";
   const out: Record<string, number> = { AED: 1 };
   for (const pair of raw.split(",")) {
     const [k, v] = pair.split(":").map((s) => s.trim());
