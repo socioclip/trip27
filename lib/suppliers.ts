@@ -29,6 +29,7 @@ export interface SupplierFlags {
 }
 
 const KEY = "suppliers";
+const TOKEN_KEY = "apeiroToken";
 const env = (k: string) => (process.env[k] || "").trim();
 
 // ---- credentials ------------------------------------------------------------
@@ -49,8 +50,12 @@ export function jinkoKey(e: JinkoEnv): string {
   return legacyEnv === e ? env("JINKO_API_KEY") : "";
 }
 
-/** Token for Apeirotrip's Amadeus Online Suite search (the `token` header its site sends). */
-export function apeiroToken() {
+/**
+ * Apeirotrip's token (the `token` header its site sends) from the environment.
+ * This is the fallback; a token pasted on the admin page (stored in Global
+ * Config) takes priority — see currentApeiroToken().
+ */
+export function apeiroEnvToken() {
   return env("APEIRO_TOKEN");
 }
 
@@ -61,7 +66,8 @@ export function credentials() {
     duffelMode: !d ? null : d.startsWith("duffel_live") ? ("live" as const) : ("test" as const),
     jinkoSandbox: !!jinkoKey("sandbox"),
     jinkoProd: !!jinkoKey("prod"),
-    apeiro: !!apeiroToken(),
+    // "Has a token" means env OR a token pasted on the admin page.
+    apeiro: !!apeiroEnvToken() || !!apeiroTokenCache.value,
     // The chat runs on Gemini or Claude (see lib/chat/llm.ts).
     chat: !!(env("GEMINI_API_KEY") || env("GOOGLE_API_KEY") || env("ANTHROPIC_API_KEY")),
   };
@@ -139,12 +145,14 @@ async function readStored(fresh = false): Promise<SupplierFlags | null> {
 
 /** The flags the site runs with right now. */
 export async function getFlags(): Promise<SupplierFlags> {
-  return effective((await readStored()) ?? defaultFlags());
+  // Read the Apeirotrip token too so credentials() (used by effective) sees it.
+  const [stored] = await Promise.all([readStored(), readApeiroToken()]);
+  return effective(stored ?? defaultFlags());
 }
 
 /** For the admin page: what's stored (fresh read) and what's actually running. */
 export async function getAdminState() {
-  const stored = await readStored(true);
+  const [stored, apeiroToken] = await Promise.all([readStored(true), apeiroTokenState()]);
   const flags = stored ?? defaultFlags();
   return {
     stored: !!stored,
@@ -153,35 +161,114 @@ export async function getAdminState() {
     credentials: credentials(),
     edgeConfig: { connected: edgeConfigConnected(), writable: edgeConfigWritable() },
     liveBookings: liveBookingsSwitch(),
+    apeiroToken,
   };
 }
 
-/** Writes the flags to Global Config through the Vercel API. */
-export async function saveFlags(next: SupplierFlags, by: string): Promise<SupplierFlags> {
+/** Upserts (or deletes) one Global Config key through the Vercel API. */
+async function writeGlobalConfig(key: string, value: unknown): Promise<void> {
   const conn = parseConnectionString(connectionString());
   if (!conn || !vercelToken()) throw new Error("Global Config isn't connected for writing. Connect a store (GLOBAL_CONFIG) and set VERCEL_API_TOKEN.");
-  const value: SupplierFlags = { duffel: !!next.duffel, jinko: next.jinko, apeiro: next.apeiro !== false, chat: next.chat !== false, updatedAt: new Date().toISOString(), updatedBy: by };
   const team = env("VERCEL_TEAM_ID");
   const api = (env("VERCEL_API_URL") || "https://api.vercel.com").replace(/\/$/, "");
   const url = `${api}/v1/edge-config/${encodeURIComponent(conn.id)}/items${team ? `?teamId=${encodeURIComponent(team)}` : ""}`;
+  const operation = value === undefined ? "delete" : "upsert";
   const res = await fetch(url, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${vercelToken()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ items: [{ operation: "upsert", key: KEY, value }] }),
+    body: JSON.stringify({ items: [{ operation, key, ...(value === undefined ? {} : { value }) }] }),
     cache: "no-store",
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error("[suppliers] Global Config write failed", res.status, text.slice(0, 500));
+    console.error("[suppliers] Global Config write failed", key, res.status, text.slice(0, 500));
     throw new Error(
       res.status === 401 || res.status === 403
         ? "Vercel rejected the token. Check VERCEL_API_TOKEN has access to this Global Config store (and VERCEL_TEAM_ID if the store belongs to a team)."
         : `Couldn't save to Global Config (${res.status}).`
     );
   }
+}
+
+/** Writes the flags to Global Config through the Vercel API. */
+export async function saveFlags(next: SupplierFlags, by: string): Promise<SupplierFlags> {
+  const value: SupplierFlags = { duffel: !!next.duffel, jinko: next.jinko, apeiro: next.apeiro !== false, chat: next.chat !== false, updatedAt: new Date().toISOString(), updatedBy: by };
+  await writeGlobalConfig(KEY, value);
   g.__t27Flags = { at: Date.now(), value };
   return value;
 }
 
+// ---- Apeirotrip token (pasted on the admin page) ----------------------------
+//
+// Apeirotrip's search token expires every ~15 minutes, so it can't live in a
+// Vercel env var. It's pasted on the admin page and stored in Global Config,
+// where the provider reads it on each search. The env var APEIRO_TOKEN still
+// works as a fallback when nothing is stored.
+
+interface StoredToken {
+  token: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
+const apeiroTokenCache: { at: number; value: StoredToken | null } = { at: 0, value: null };
+
+function cleanToken(v: unknown): StoredToken | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.token !== "string" || !o.token.trim()) return null;
+  return { token: o.token, updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "", updatedBy: typeof o.updatedBy === "string" ? o.updatedBy : undefined };
+}
+
+/** The stored token (fresh read bypasses the short cache). */
+export async function readApeiroToken(fresh = false): Promise<StoredToken | null> {
+  if (!edgeConfigConnected()) return apeiroTokenCache.value;
+  if (!fresh && apeiroTokenCache.at && Date.now() - apeiroTokenCache.at < TTL_MS) return apeiroTokenCache.value;
+  try {
+    const client = createClient(connectionString());
+    const value = cleanToken(await client.get(TOKEN_KEY, fresh ? { consistentRead: true } : undefined));
+    apeiroTokenCache.at = Date.now();
+    apeiroTokenCache.value = value;
+    return value;
+  } catch (e) {
+    console.error("[suppliers] Apeirotrip token read failed", (e as Error).message);
+    return apeiroTokenCache.value;
+  }
+}
+
+/** The token the Apeirotrip provider uses right now: the pasted one, else the env var. */
+export async function currentApeiroToken(): Promise<string> {
+  const stored = await readApeiroToken();
+  return (stored?.token || "").trim() || apeiroEnvToken();
+}
+
+/** Where the active Apeirotrip token comes from, and when the stored one changed. */
+export async function apeiroTokenState() {
+  const stored = await readApeiroToken(true);
+  return {
+    source: stored ? ("stored" as const) : apeiroEnvToken() ? ("env" as const) : ("none" as const),
+    updatedAt: stored?.updatedAt,
+    updatedBy: stored?.updatedBy,
+    envFallback: !!apeiroEnvToken(),
+  };
+}
+
+/** Saves a pasted Apeirotrip token to Global Config. */
+export async function saveApeiroToken(token: string, by: string): Promise<StoredToken> {
+  const value: StoredToken = { token: token.trim(), updatedAt: new Date().toISOString(), updatedBy: by };
+  await writeGlobalConfig(TOKEN_KEY, value);
+  apeiroTokenCache.at = Date.now();
+  apeiroTokenCache.value = value;
+  return value;
+}
+
+/** Removes the pasted token, falling back to the env var (if any). */
+export async function clearApeiroToken(): Promise<void> {
+  await writeGlobalConfig(TOKEN_KEY, undefined);
+  apeiroTokenCache.at = Date.now();
+  apeiroTokenCache.value = null;
+}
+
+export type ApeiroTokenState = Awaited<ReturnType<typeof apeiroTokenState>>;
 export type AdminState = Awaited<ReturnType<typeof getAdminState>>;
