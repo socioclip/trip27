@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 const UPDATED = "15 October 2026";
-const EMAIL = "sarfarazfresh@gmail.com";
+const EMAIL = "hello@trip27.me";
 
 const sections: { h: string; body: string[]; list?: string[] }[] = [
   {

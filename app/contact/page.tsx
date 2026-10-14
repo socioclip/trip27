@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "Get in touch with the trip27 team — email, WhatsApp or phone. We're based in Dubai, UAE.",
 };
 
-const EMAIL = "sarfarazfresh@gmail.com";
+const EMAIL = "hello@trip27.me";
 const PHONE_DISPLAY = "+971 58 561 5781";
 const PHONE_INTL = "971585615781";
 
