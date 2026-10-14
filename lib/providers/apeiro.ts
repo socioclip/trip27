@@ -1,7 +1,7 @@
 import "server-only";
 import { airport, CITY_CODES } from "../airports";
 import { round2, toDisplay } from "../money";
-import { apeiroToken, getFlags } from "../suppliers";
+import { currentApeiroToken, getFlags } from "../suppliers";
 import { ProviderError, type CabinClass, type Carrier, type Endpoint, type Money, type Offer, type OfferPassenger, type SearchParams, type Segment, type Slice } from "../types";
 import type { FlightProvider } from "./types";
 
@@ -201,10 +201,8 @@ function itineraries(p: SearchParams, cls: string) {
   return null;
 }
 
-async function search(p: SearchParams): Promise<Offer[]> {
-  if (!(await getFlags()).apeiro) return [];
-  const token = apeiroToken();
-  if (!token) return [];
+/** One search with an explicit token (used by both live search and the admin token test). */
+async function runSearch(p: SearchParams, token: string): Promise<Offer[]> {
   const cls = CLASS[p.cabin] || "Y";
   const trip = itineraries(p, cls);
   if (!trip) return [];
@@ -269,7 +267,7 @@ async function search(p: SearchParams): Promise<Offer[]> {
   const text = await res.text();
   if (!res.ok) {
     console.error("[apeiro] search", res.status, text.slice(0, 500));
-    if (res.status === 401 || res.status === 403) throw new ProviderError("Apeirotrip rejected the token. Update APEIRO_TOKEN.", 502);
+    if (res.status === 401 || res.status === 403) throw new ProviderError("Apeirotrip rejected the token — it has probably expired. Paste a fresh one.", 401);
     throw new ProviderError("Apeirotrip had a problem. Please try again.", 502);
   }
   let data: J;
@@ -292,6 +290,27 @@ async function search(p: SearchParams): Promise<Offer[]> {
     }
   });
   return offers.sort((a, b) => a.total.amount - b.total.amount).slice(0, MAX_OFFERS);
+}
+
+async function search(p: SearchParams): Promise<Offer[]> {
+  if (!(await getFlags()).apeiro) return [];
+  const token = await currentApeiroToken();
+  if (!token) return [];
+  return runSearch(p, token);
+}
+
+/** Checks a pasted token with a throwaway DXB–MAA search, so the admin page can validate before saving. */
+export async function testApeiroToken(token: string): Promise<{ ok: boolean; offers: number; message: string }> {
+  if (!token.trim()) return { ok: false, offers: 0, message: "Paste a token first." };
+  const date = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+  const params: SearchParams = { slices: [{ origin: "DXB", destination: "MAA", date }], adults: 1, children: 0, infants: 0, cabin: "economy" };
+  try {
+    const offers = await runSearch(params, token.trim());
+    if (!offers.length) return { ok: false, offers: 0, message: "The token was accepted but no fares came back. Try searching again or paste a fresh token." };
+    return { ok: true, offers: offers.length, message: `Valid — ${offers.length} fares returned for a test DXB→MAA search.` };
+  } catch (e) {
+    return { ok: false, offers: 0, message: e instanceof ProviderError ? e.message : "Couldn't reach Apeirotrip. Please try again." };
+  }
 }
 
 const compareOnly = () => new ProviderError("Apeirotrip fares are shown for comparison only and can't be booked on trip27.", 400);

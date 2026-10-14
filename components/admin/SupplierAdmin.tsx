@@ -89,7 +89,7 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
         envVar: "APEIRO_TOKEN",
         hasKey: c.apeiro,
         on: apeiro,
-        note: "Live fares from apeirotrip.com (Amadeus Online Suite), shown for price comparison only. Not bookable on trip27.",
+        note: "Live fares from apeirotrip.com (Amadeus Online Suite), shown for price comparison only. Not bookable on trip27. Set the token in the box below.",
       },
     ],
     [c, duffel, jinko, apeiro]
@@ -191,6 +191,8 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
         ))}
       </div>
 
+      <ApeiroTokenPanel initial={state.apeiroToken} writable={writable} />
+
       <div className="card p-5 flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -244,6 +246,98 @@ export default function SupplierAdmin({ initial, email }: { initial: AdminState;
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ApeiroTokenPanel({ initial, writable }: { initial: AdminState["apeiroToken"]; writable: boolean }) {
+  const [tok, setTok] = useState(initial);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState<"save" | "clear" | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const save = async () => {
+    setBusy("save");
+    setResult(null);
+    try {
+      const r = await fetch(api("/api/admin/apeiro-token"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: value }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Couldn't save the token.");
+      setTok(j.token);
+      setValue("");
+      setResult({ ok: true, message: j.message || "Saved." });
+    } catch (e) {
+      setResult({ ok: false, message: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const clear = async () => {
+    setBusy("clear");
+    setResult(null);
+    try {
+      const r = await fetch(api("/api/admin/apeiro-token"), { method: "DELETE" });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Couldn't clear the token.");
+      setTok(j.token);
+      setResult(null);
+    } catch (e) {
+      setResult({ ok: false, message: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const status =
+    tok.source === "stored"
+      ? `✓ Token set here${tok.updatedAt ? ` · updated ${when(tok.updatedAt)}` : ""}${tok.updatedBy ? ` by ${tok.updatedBy}` : ""}`
+      : tok.source === "env"
+        ? "Using APEIRO_TOKEN from Vercel. Paste a token below to override it for testing."
+        : "No token yet. Paste one from a fresh apeirotrip.com search.";
+
+  return (
+    <div className="card p-5 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-base font-extrabold">Apeirotrip token</h2>
+        <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Expires ~15 min</span>
+      </div>
+      <p className="text-sm text-muted">
+        Apeirotrip&apos;s search token is short-lived, so paste a fresh one here to test — no need to touch Vercel. On apeirotrip.com open DevTools → Network, run a search, open the <code className="font-mono">lowfare</code> request and copy its <code className="font-mono">token</code> header.
+      </p>
+      <p className={`text-xs font-semibold ${tok.source === "stored" ? "text-mint-500" : tok.source === "env" ? "text-brand-700" : "text-accent-600"}`}>{status}</p>
+
+      <textarea
+        value={value}
+        onChange={(e) => { setValue(e.target.value); setResult(null); }}
+        disabled={!writable || busy !== null}
+        rows={3}
+        spellCheck={false}
+        placeholder="Paste the token value here…"
+        className="w-full rounded-xl border border-line bg-surface/40 p-3 font-mono text-xs break-all focus-visible:outline-2 focus-visible:outline-brand-500 disabled:opacity-40"
+      />
+
+      {result && (
+        <p role="alert" className={`text-sm font-medium ${result.ok ? "text-mint-500" : "text-accent-600"}`}>
+          {result.ok ? "✓ " : ""}{result.message}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className="btn-brand" onClick={save} disabled={!value.trim() || !writable || busy !== null}>
+          {busy === "save" ? "Testing…" : "Save & test"}
+        </button>
+        {tok.source === "stored" && (
+          <button type="button" className="btn-ghost" onClick={clear} disabled={!writable || busy !== null}>
+            {busy === "clear" ? "Clearing…" : tok.envFallback ? "Clear (fall back to Vercel)" : "Clear token"}
+          </button>
+        )}
+        {!writable && <span className="text-xs text-muted">Saving needs Global Config + VERCEL_API_TOKEN (see the banner above).</span>}
       </div>
     </div>
   );
