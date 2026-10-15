@@ -49,7 +49,7 @@ export default function ItineraryCard({
           <div className="flex flex-wrap gap-2 text-xs">
             <Tag>{c.slices[0]?.segments[0]?.cabin || "Economy"}</Tag>
             <Tag>{cabinBagLabel(c)}</Tag>
-            {c.checkedBags > 0 ? <Tag tone="ok">{checkedBagLabel(c)}</Tag> : <Tag>No checked bag</Tag>}
+            {hasChecked(c) ? <Tag tone="ok">{checkedBagLabel(c)}</Tag> : <Tag>No checked bag</Tag>}
             {group.fares.length > 1 && <Tag>{group.fares.length} fare options</Tag>}
             <button type="button" onClick={() => setOpen(open === "details" ? null : "details")} className="text-brand-600 font-semibold hover:underline ml-auto">
               {open === "details" ? "Hide details" : "Flight details"}
@@ -104,7 +104,7 @@ function FareCard({ offer, base, recommended, onSelect, loading, disabled }: { o
   const cond = offer.conditions;
   const items: [boolean | null, string][] = [
     [true, cabinBagLabel(offer)],
-    [offer.checkedBags > 0, checkedBagLabel(offer)],
+    [hasChecked(offer), checkedBagLabel(offer)],
     [
       cond.changeable,
       cond.changeable == null ? "Changes: airline rules apply" : !cond.changeable ? "Not changeable" : cond.changePenalty && cond.changePenalty.amount > 0 ? `Change fee ${formatMoney(cond.changePenalty)}` : "Free changes",
@@ -144,12 +144,21 @@ function cabinBagLabel(o: Offer) {
   return `${n} cabin bag${n > 1 ? "s" : ""}${kg}`;
 }
 
-/** "2 checked bags · 23 kg each", "1 checked bag · 30 kg", or "No checked bag". */
+/** True when the fare includes any checked allowance — by piece or by weight. */
+function hasChecked(o: Offer) {
+  return o.checkedBags > 0 || !!o.checkedWeightKg;
+}
+
+/** "2 checked bags · 23 kg each", "1 checked bag · 30 kg", "25 kg checked baggage", or "No checked bag". */
 function checkedBagLabel(o: Offer) {
-  if (!(o.checkedBags > 0)) return "No checked bag";
   const n = o.checkedBags;
-  const kg = o.checkedWeightKg ? ` · ${o.checkedWeightKg} kg${n > 1 ? " each" : ""}` : "";
-  return `${n} checked bag${n > 1 ? "s" : ""}${kg}`;
+  if (n > 0) {
+    const kg = o.checkedWeightKg ? ` · ${o.checkedWeightKg} kg${n > 1 ? " each" : ""}` : "";
+    return `${n} checked bag${n > 1 ? "s" : ""}${kg}`;
+  }
+  // Weight-concept fare: an allowance in kg with no fixed piece count.
+  if (o.checkedWeightKg) return `${o.checkedWeightKg} kg checked baggage`;
+  return "No checked bag";
 }
 
 function Tag({ children, tone }: { children: React.ReactNode; tone?: "ok" }) {

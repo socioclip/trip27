@@ -71,7 +71,7 @@ export function applyFilters(groups: ItineraryGroup[], f: Filters) {
       const s = g.slices[Number(i)];
       if (set.size && s && !set.has(timeBucket(s.departingAt))) return false;
     }
-    if (f.bagIncluded && !g.fares.some((o) => o.checkedBags > 0)) return false;
+    if (f.bagIncluded && !g.fares.some((o) => o.checkedBags > 0 || !!o.checkedWeightKg)) return false;
     if (f.refundable && !g.fares.some((o) => o.conditions.refundable)) return false;
     return true;
   });
