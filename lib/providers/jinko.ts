@@ -293,7 +293,19 @@ function toOffer(s: Snapshot, id: string): Offer {
     itineraryKey: owner.code + ":" + slices.map((sl) => sl.segments.map((g) => g.flightNumber + g.departingAt).join(",")).join("|"),
     checkedBags: fare.included_baggage?.pieces ?? 0,
     carryOnBags: fare.carry_on_baggage?.pieces ?? 1,
+    carryOnWeightKg: bagKg(fare.carry_on_baggage),
+    checkedWeightKg: bagKg(fare.included_baggage),
   };
+}
+
+/** kg weight from a Jinko baggage object, only when it actually reports kilograms. */
+function bagKg(b: J): number | null {
+  if (!b) return null;
+  const unit = String(b.unit ?? b.weight_unit ?? "").toLowerCase();
+  const w = Number(b.weight ?? b.weight_kg ?? b.max_weight_kg ?? b.weight_in_kg);
+  if (!Number.isFinite(w) || w <= 0) return null;
+  if (unit && !unit.startsWith("k")) return null; // only surface kilograms
+  return Math.round(w);
 }
 
 // ---- search ---------------------------------------------------------------------

@@ -103,6 +103,9 @@ export interface Offer {
   itineraryKey: string; // same flights => same key; used to group fare brands
   checkedBags: number;
   carryOnBags: number;
+  /** Weight allowance per bag in kg, where the airline/supplier reports it (null = not provided, e.g. piece-concept fares). */
+  carryOnWeightKg?: number | null;
+  checkedWeightKg?: number | null;
   /** Supplier label shown on the card for compare-only sources (e.g. "Apeirotrip"). */
   supplier?: string;
   /** false = shown for price comparison only; can't go to checkout. */
