@@ -17,13 +17,18 @@ export default function Extras({
 }) {
   const included = offer.checkedBags;
   const cabinKg = offer.carryOnWeightKg ? ` (${offer.carryOnWeightKg} kg)` : "";
-  const checkedKg = offer.checkedWeightKg ? ` (${offer.checkedWeightKg} kg${included > 1 ? " each" : ""})` : "";
+  const checkedPhrase =
+    included > 0
+      ? ` and ${included} checked bag${included > 1 ? "s" : ""}${offer.checkedWeightKg ? ` (${offer.checkedWeightKg} kg${included > 1 ? " each" : ""})` : ""}`
+      : offer.checkedWeightKg
+        ? ` and ${offer.checkedWeightKg} kg of checked baggage`
+        : "";
   return (
     <div className="space-y-4">
       <div className="card p-5">
         <h2 className="text-lg font-extrabold">Baggage</h2>
         <p className="text-sm text-muted">
-          Your fare includes {offer.carryOnBags || 1} cabin bag{cabinKg}{included ? ` and ${included} checked bag${included > 1 ? "s" : ""}${checkedKg}` : ""} per traveller.
+          Your fare includes {offer.carryOnBags || 1} cabin bag{cabinKg}{checkedPhrase} per traveller.
           {baggage.length ? " Add more now — it's usually cheaper than at the airport." : ""}
         </p>
         {!baggage.length ? (
