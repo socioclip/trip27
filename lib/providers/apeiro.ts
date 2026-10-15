@@ -148,6 +148,12 @@ function toOffer(item: J, idx: number, p: SearchParams, cabin: string): Offer | 
   const fpb = fr.pfi?.[0]?.fpb || {};
   const bags = checkedBags(fr.cb?.[0]);
   const carry = Number(fr.cbnb?.[0]?.cbga) > 0 ? 1 : 0;
+  // Apeirotrip reports allowances in kg (bgu/cbgu = "K"). Only weight-type checked
+  // allowances (bgt = "W") carry a real kg figure; piece-type ones don't.
+  const cb0 = fr.cb?.[0];
+  const cbnb0 = fr.cbnb?.[0];
+  const checkedWeightKg = cb0 && String(cb0.bgu).toUpperCase() === "K" && String(cb0.bgt).toUpperCase() === "W" && Number(cb0.bga) > 0 ? Number(cb0.bga) : null;
+  const carryOnWeightKg = cbnb0 && String(cbnb0.cbgu).toUpperCase() === "K" && Number(cbnb0.cbga) > 0 ? Number(cbnb0.cbga) : null;
   const brand = fr.fcc?.[0]?.bbf || fr.nm || cabin;
   const slices: Slice[] = item.fsg.map((s: J, i: number) => normSlice(s, i, brand, bags, carry));
   if (slices.some((s) => !s.segments.length || !s.departingAt)) return null;
@@ -178,6 +184,8 @@ function toOffer(item: J, idx: number, p: SearchParams, cabin: string): Offer | 
     itineraryKey: "apeiro:" + owner.code + ":" + slices.map((s) => s.segments.map((g) => g.flightNumber + g.departingAt).join(",")).join("|"),
     checkedBags: bags,
     carryOnBags: carry,
+    carryOnWeightKg,
+    checkedWeightKg,
     supplier: "Apeirotrip",
     bookable: false,
   };

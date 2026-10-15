@@ -48,7 +48,8 @@ export default function ItineraryCard({
           ))}
           <div className="flex flex-wrap gap-2 text-xs">
             <Tag>{c.slices[0]?.segments[0]?.cabin || "Economy"}</Tag>
-            {c.checkedBags > 0 ? <Tag tone="ok">Checked bag included</Tag> : <Tag>Cabin bag only</Tag>}
+            <Tag>{cabinBagLabel(c)}</Tag>
+            {c.checkedBags > 0 ? <Tag tone="ok">{checkedBagLabel(c)}</Tag> : <Tag>No checked bag</Tag>}
             {group.fares.length > 1 && <Tag>{group.fares.length} fare options</Tag>}
             <button type="button" onClick={() => setOpen(open === "details" ? null : "details")} className="text-brand-600 font-semibold hover:underline ml-auto">
               {open === "details" ? "Hide details" : "Flight details"}
@@ -102,8 +103,8 @@ function FareCard({ offer, base, recommended, onSelect, loading, disabled }: { o
   const diff = offer.total.amount - base.total.amount;
   const cond = offer.conditions;
   const items: [boolean | null, string][] = [
-    [true, `${offer.carryOnBags || 1} cabin bag`],
-    [offer.checkedBags > 0, offer.checkedBags > 0 ? `${offer.checkedBags} checked bag${offer.checkedBags > 1 ? "s" : ""}` : "No checked bag"],
+    [true, cabinBagLabel(offer)],
+    [offer.checkedBags > 0, checkedBagLabel(offer)],
     [
       cond.changeable,
       cond.changeable == null ? "Changes: airline rules apply" : !cond.changeable ? "Not changeable" : cond.changePenalty && cond.changePenalty.amount > 0 ? `Change fee ${formatMoney(cond.changePenalty)}` : "Free changes",
@@ -134,6 +135,21 @@ function FareCard({ offer, base, recommended, onSelect, loading, disabled }: { o
       </div>
     </div>
   );
+}
+
+/** "1 cabin bag · 7 kg" — appends the kg allowance only when the airline provides it. */
+function cabinBagLabel(o: Offer) {
+  const n = o.carryOnBags || 1;
+  const kg = o.carryOnWeightKg ? ` · ${o.carryOnWeightKg} kg` : "";
+  return `${n} cabin bag${n > 1 ? "s" : ""}${kg}`;
+}
+
+/** "2 checked bags · 23 kg each", "1 checked bag · 30 kg", or "No checked bag". */
+function checkedBagLabel(o: Offer) {
+  if (!(o.checkedBags > 0)) return "No checked bag";
+  const n = o.checkedBags;
+  const kg = o.checkedWeightKg ? ` · ${o.checkedWeightKg} kg${n > 1 ? " each" : ""}` : "";
+  return `${n} checked bag${n > 1 ? "s" : ""}${kg}`;
 }
 
 function Tag({ children, tone }: { children: React.ReactNode; tone?: "ok" }) {

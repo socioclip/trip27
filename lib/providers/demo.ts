@@ -371,6 +371,8 @@ function buildOffer(p: SearchParams, i: number, b: number, its?: Itinerary[]): O
     itineraryKey: `${it.airline.code}:${slices.map((s) => s.segments.map((g) => g.flightNumber + g.departingAt).join(",")).join("|")}`,
     checkedBags: brand.bags,
     carryOnBags: 1,
+    carryOnWeightKg: 7,
+    checkedWeightKg: brand.bags > 0 ? 23 : null,
   };
 }
 
